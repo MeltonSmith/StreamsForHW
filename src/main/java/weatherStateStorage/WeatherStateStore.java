@@ -1,19 +1,16 @@
 package weatherStateStorage;
 
-import model.Weather;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.connect.json.JsonSerializer;
+import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.Consumed;
-import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
-import org.apache.kafka.streams.state.StoreBuilder;
-import org.apache.kafka.streams.state.Stores;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.Date;
 import java.util.Properties;
 
 import static org.apache.kafka.streams.Topology.AutoOffsetReset.EARLIEST;
@@ -24,9 +21,10 @@ import static org.apache.kafka.streams.Topology.AutoOffsetReset.EARLIEST;
  */
 public class WeatherStateStore {
     public static final String WEATHER_RAW_TOPIC = "weather";
+    private final static Logger log = LoggerFactory.getLogger(WeatherStateStore.class);
+//    private static final Logger log = Logger.getLogger(WeatherStateStore.class);
 
-
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception{
 
 //        TODO Подтянуть все даты каким-то образом в GlobalKTable (либо через Kafka топик, либо как-то еще);
 //        TODO Добавить к отелям геохеш и развернуть стрим - по одной записи на каждую дату;
@@ -41,22 +39,30 @@ public class WeatherStateStore {
 //        config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 //        config.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 10);
 
-        StreamsConfig streamsConfig = new StreamsConfig(getProperties());
+//        StreamsConfig streamsConfig = new StreamsConfig(getProperties());
         Serde<String> stringSerde = Serdes.String();
 
-        new JSonPOj
-        JsonSerializer<Weather> purchaseJsonSerializer = new JsonSerializer<>();
+//        JsonSerializer<Weather> purchase/**/JsonSerializer = new JsonSerializer<>();
 
 
         StreamsBuilder builder = new StreamsBuilder();
-
-        KTable<String, Date> shareVolume = builder.stream(WEATHER_RAW_TOPIC,
-                Consumed.with(stringSerde, Serdes.)
+        builder.stream(WEATHER_RAW_TOPIC,
+                Consumed.with(stringSerde, stringSerde)
                         .withOffsetResetPolicy(EARLIEST))
-                .mapValues(st -> ShareVolume.newBuilder(st).build())
-                .groupBy((k, v) -> v.getSymbol(), Serialized.with(stringSerde, shareVolumeSerde))
-                .reduce(ShareVolume::sum);
+//                .mapValues(st -> st.)
+//                .groupBy((k, v) -> v.getSymbol(), Serialized.with(stringSerde, shareVolumeSerde))
+//                .reduce(ShareVolume::sum)
+                .peek((k, v) -> log.info("Value" + v));
 
+
+        KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), getProperties());
+//        MockDataProducer.produceStockTransactions(15, 50, 25, false);
+        log.info("Started");
+        kafkaStreams.start();
+        Thread.sleep(65000);
+        log.info("Shutting down now");
+        kafkaStreams.close();
+//        MockDataProducer.shutdown();
 
 
     }
