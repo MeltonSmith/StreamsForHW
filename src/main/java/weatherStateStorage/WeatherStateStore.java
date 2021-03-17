@@ -8,8 +8,7 @@ import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.log4j.Logger;
 
 import java.util.Properties;
 
@@ -21,8 +20,8 @@ import static org.apache.kafka.streams.Topology.AutoOffsetReset.EARLIEST;
  */
 public class WeatherStateStore {
     public static final String WEATHER_RAW_TOPIC = "weather";
-    private final static Logger log = LoggerFactory.getLogger(WeatherStateStore.class);
-//    private static final Logger log = Logger.getLogger(WeatherStateStore.class);
+//    private final static Logger log = LoggerFactory.getLogger(WeatherStateStore.class);
+    private static final Logger log = Logger.getLogger(WeatherStateStore.class);
 
     public static void main(String[] args) throws Exception{
 
