@@ -7,15 +7,13 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
-import org.apache.kafka.streams.kstream.Consumed;
-import org.apache.kafka.streams.kstream.Grouped;
-import org.apache.kafka.streams.kstream.KTable;
-import org.apache.kafka.streams.kstream.Serialized;
+import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
 import org.apache.log4j.Logger;
 import util.serde.StreamSerdes;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Properties;
 
 import static org.apache.kafka.streams.Topology.AutoOffsetReset.EARLIEST;
@@ -56,14 +54,34 @@ public class WeatherStateStore {
         //
 
         StreamsBuilder builder = new StreamsBuilder();
+//        builder.stream(WEATHER_RAW_TOPIC,
+//                Consumed.with(stringSerde, weatherSerde)
+//                        .withOffsetResetPolicy(EARLIEST))
+////                .mapValues(st -> st.getWeatherDate())
+//                .groupBy((k, v) -> v.getWeatherDate(), Grouped.with(stringSerde, weatherSerde))
+//                .reduce((v1, v2) -> v1 )
+//                .toStream()
+//                .peek((k, v) -> log.info("Date " + v.getWeatherDate() + "Lat " + v.getLatitude()))
+//                .to("testWeather", Produced.with(stringSerde, weatherSerde));
+
         builder.stream(WEATHER_RAW_TOPIC,
                 Consumed.with(stringSerde, weatherSerde)
                         .withOffsetResetPolicy(EARLIEST))
-//                .mapValues(st -> st.getWeatherDate())
                 .groupBy((k, v) -> v.getWeatherDate(), Grouped.with(stringSerde, weatherSerde))
-                .reduce((v1, v2) -> v1 )
+                .aggregate(() -> new HashSet<String>(),
+                        (k, v, a) -> {
+//                            Long count = a.get(v.getWeatherDate());
+//                            if (count == null) {
+//                                count = 0L;
+//                            }
+                            log.info("Value " + v.getWeatherDate() + " Size =" + a.size());
+                            a.add(v.getWeatherDate());
+                            return a;
+                        }, Materialized.with())
+                .transformValues()
                 .toStream()
-                .peek((k, v) -> log.info("Date " + v.getWeatherDate()));
+                .peek((k, v) -> log.info("Size " + v.size()));
+
 
 //        KTable<String, HashMap<String, Long>> aggregate = topology.stream("input")
 //                .groupBy((k, v) -> 0 /*map all records to same, arbitrary key*/)
@@ -82,7 +100,7 @@ public class WeatherStateStore {
 //        MockDataProducer.produceStockTransactions(15, 50, 25, false);
         log.info("Started");
         kafkaStreams.start();
-//        Thread.sleep(65000);
+        Thread.sleep(120000);
         log.info("Shutting down now");
         kafkaStreams.close();
 //        MockDataProducer.shutdown();
