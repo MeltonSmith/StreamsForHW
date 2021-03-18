@@ -1,5 +1,6 @@
 package weatherStateStorage;
 
+import model.Weather;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
@@ -9,6 +10,7 @@ import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
 import org.apache.log4j.Logger;
+import util.serde.StreamSerdes;
 
 import java.util.Properties;
 
@@ -41,18 +43,19 @@ public class WeatherStateStore {
 
 //        StreamsConfig streamsConfig = new StreamsConfig(getProperties());
         Serde<String> stringSerde = Serdes.String();
+        Serde<Weather> weatherSerde = StreamSerdes.weatherSerde();
 
 //        JsonSerializer<Weather> purchase/**/JsonSerializer = new JsonSerializer<>();
 
 
         StreamsBuilder builder = new StreamsBuilder();
         builder.stream(WEATHER_RAW_TOPIC,
-                Consumed.with(stringSerde, stringSerde)
+                Consumed.with(stringSerde, weatherSerde)
                         .withOffsetResetPolicy(EARLIEST))
 //                .mapValues(st -> st.)
 //                .groupBy((k, v) -> v.getSymbol(), Serialized.with(stringSerde, shareVolumeSerde))
 //                .reduce(ShareVolume::sum)
-                .peek((k, v) -> log.info("Value" + v));
+                .peek((k, v) -> log.info("Value" + v.getWeatherDate()));
 
 
         KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), getProperties());

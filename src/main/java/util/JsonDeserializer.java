@@ -13,9 +13,10 @@ import java.util.Map;
 public class JsonDeserializer<T> implements Deserializer<T> {
     private ObjectMapper objectMapper = new ObjectMapper();
 
-    private Class<T> tClass;
+    private Class<T> deserializedClass;
 
-    public JsonDeserializer() {
+    public JsonDeserializer(Class<T> deserializedClass) {
+        this.deserializedClass = deserializedClass;
     }
 
     @Override
@@ -25,7 +26,7 @@ public class JsonDeserializer<T> implements Deserializer<T> {
 
         T data;
         try {
-            data = objectMapper.readValue(bytes, tClass);
+            data = objectMapper.readValue(bytes, deserializedClass);
         } catch (Exception e) {
             throw new SerializationException(e);
         }
@@ -36,6 +37,6 @@ public class JsonDeserializer<T> implements Deserializer<T> {
     @SuppressWarnings("unchecked")
     @Override
     public void configure(Map<String, ?> configs, boolean isKey) {
-        tClass = (Class<T>) configs.get("deserializedClass");
+        deserializedClass = (Class<T>) configs.get("deserializedClass");
     }
 }
