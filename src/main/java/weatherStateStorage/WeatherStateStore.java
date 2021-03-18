@@ -13,6 +13,7 @@ import org.apache.log4j.Logger;
 import java.util.Properties;
 
 import static org.apache.kafka.streams.Topology.AutoOffsetReset.EARLIEST;
+import static org.apache.kafka.streams.Topology.AutoOffsetReset.LATEST;
 
 /**
  * Created by: Ian_Rakhmatullin
