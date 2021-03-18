@@ -8,10 +8,14 @@ import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.Grouped;
+import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Serialized;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
 import org.apache.log4j.Logger;
 import util.serde.StreamSerdes;
 
+import java.util.HashMap;
 import java.util.Properties;
 
 import static org.apache.kafka.streams.Topology.AutoOffsetReset.EARLIEST;
@@ -45,24 +49,40 @@ public class WeatherStateStore {
         Serde<String> stringSerde = Serdes.String();
         Serde<Weather> weatherSerde = StreamSerdes.weatherSerde();
 
+
 //        JsonSerializer<Weather> purchase/**/JsonSerializer = new JsonSerializer<>();
 
+        //TODO джойнит похоже что только по ключам
+        //
 
         StreamsBuilder builder = new StreamsBuilder();
         builder.stream(WEATHER_RAW_TOPIC,
                 Consumed.with(stringSerde, weatherSerde)
                         .withOffsetResetPolicy(EARLIEST))
-//                .mapValues(st -> st.)
-//                .groupBy((k, v) -> v.getSymbol(), Serialized.with(stringSerde, shareVolumeSerde))
-//                .reduce(ShareVolume::sum)
-                .peek((k, v) -> log.info("Value" + v.getWeatherDate()));
+//                .mapValues(st -> st.getWeatherDate())
+                .groupBy((k, v) -> v.getWeatherDate(), Grouped.with(stringSerde, weatherSerde))
+                .reduce((v1, v2) -> v1 )
+                .toStream()
+                .peek((k, v) -> log.info("Date " + v.getWeatherDate()));
+
+//        KTable<String, HashMap<String, Long>> aggregate = topology.stream("input")
+//                .groupBy((k, v) -> 0 /*map all records to same, arbitrary key*/)
+//                .aggregate(() -> new HashMap<String, Long>(),
+//                        (k, v, a) -> {
+//                            Long count = a.get(v.get("state"));
+//                            if (count == null) {
+//                                count = 0L;
+//                            }
+//                            a.put(v.get("state"), ++count);
+//                            return a;
+//                        });
 
 
         KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), getProperties());
 //        MockDataProducer.produceStockTransactions(15, 50, 25, false);
         log.info("Started");
         kafkaStreams.start();
-        Thread.sleep(65000);
+//        Thread.sleep(65000);
         log.info("Shutting down now");
         kafkaStreams.close();
 //        MockDataProducer.shutdown();
