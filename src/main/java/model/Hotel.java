@@ -7,7 +7,7 @@ import lombok.Data;
  * Date: 18.03.2021
  */
 @Data
-public class HotelData {
+public class Hotel {
     private int id;
     private String name;
     private String country;

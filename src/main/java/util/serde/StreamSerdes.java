@@ -24,8 +24,8 @@ public class StreamSerdes {
     }
 
     public abstract static class WrapperSerde<T> implements Serde<T> {
-        private JsonSerializer<T> serializer;
-        private JsonDeserializer<T> deserializer;
+        private final JsonSerializer<T> serializer;
+        private final JsonDeserializer<T> deserializer;
 
         protected WrapperSerde(JsonSerializer<T> serializer, JsonDeserializer<T> deserializer) {
             this.serializer = serializer;

@@ -9,8 +9,11 @@ import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
+import org.apache.kafka.streams.state.StoreBuilder;
+import org.apache.kafka.streams.state.Stores;
 import org.apache.log4j.Logger;
 import util.serde.StreamSerdes;
+import util.transformers.CustomTransformer;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -25,6 +28,7 @@ import static org.apache.kafka.streams.Topology.AutoOffsetReset.LATEST;
  */
 public class WeatherStateStore {
     public static final String WEATHER_RAW_TOPIC = "weather";
+    public static final String HOTELS_TOPIC = "hotels";
 //    private final static Logger log = LoggerFactory.getLogger(WeatherStateStore.class);
     private static final Logger log = Logger.getLogger(WeatherStateStore.class);
 
@@ -46,6 +50,10 @@ public class WeatherStateStore {
 //        StreamsConfig streamsConfig = new StreamsConfig(getProperties());
         Serde<String> stringSerde = Serdes.String();
         Serde<Weather> weatherSerde = StreamSerdes.weatherSerde();
+        Serde<Weather> hotelsSerde = StreamSerdes.hotelsSerde();
+
+
+
 
 
 //        JsonSerializer<Weather> purchase/**/JsonSerializer = new JsonSerializer<>();
@@ -54,6 +62,14 @@ public class WeatherStateStore {
         //
 
         StreamsBuilder builder = new StreamsBuilder();
+
+        // create store
+        StoreBuilder storeBuilder = Stores.keyValueStoreBuilder(
+                Stores.persistentKeyValueStore("invStore"),
+                Serdes.String(),
+                Serdes.String());
+        // register store
+        builder.addStateStore(storeBuilder);
 //        builder.stream(WEATHER_RAW_TOPIC,
 //                Consumed.with(stringSerde, weatherSerde)
 //                        .withOffsetResetPolicy(EARLIEST))
@@ -64,21 +80,11 @@ public class WeatherStateStore {
 //                .peek((k, v) -> log.info("Date " + v.getWeatherDate() + "Lat " + v.getLatitude()))
 //                .to("testWeather", Produced.with(stringSerde, weatherSerde));
 
-        builder.stream(WEATHER_RAW_TOPIC,
-                Consumed.with(stringSerde, weatherSerde)
+        builder.stream(HOTELS_TOPIC,
+                Consumed.with(stringSerde, hotelsSerde) //key null
                         .withOffsetResetPolicy(EARLIEST))
-                .groupBy((k, v) -> v.getWeatherDate(), Grouped.with(stringSerde, weatherSerde))
-                .aggregate(() -> new HashSet<String>(),
-                        (k, v, a) -> {
-//                            Long count = a.get(v.getWeatherDate());
-//                            if (count == null) {
-//                                count = 0L;
-//                            }
-                            log.info("Value " + v.getWeatherDate() + " Size =" + a.size());
-                            a.add(v.getWeatherDate());
-                            return a;
-                        }, Materialized.with())
-                .transformValues()
+                .join()
+                .transformValues(() -> new CustomTransformer())
                 .toStream()
                 .peek((k, v) -> log.info("Size " + v.size()));
 
