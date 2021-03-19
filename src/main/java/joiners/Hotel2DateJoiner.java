@@ -17,6 +17,6 @@ public class Hotel2DateJoiner implements ValueJoiner<Hotel, String, HotelDailyDa
      */
     @Override
     public HotelDailyData apply(Hotel hotel, String date) {
-        return new HotelDailyData(hotel, date);
+        return new HotelDailyData(hotel, date, null, null);
     }
 }

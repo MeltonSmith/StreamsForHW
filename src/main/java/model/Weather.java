@@ -1,6 +1,9 @@
 package model;
 
 
+import ch.hsr.geohash.GeoHash;
+import com.fasterxml.jackson.annotation.JsonGetter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
@@ -17,10 +20,18 @@ public class Weather {
     private double longitude;
     @JsonProperty("wthr_date")
     private String weatherDate;
-
     private double avg_tmpr_f;
     private double avg_tmpr_c;
     private String year;
     private String month;
     private String day;
+
+    private String getGeoHash(){
+        return GeoHash.withCharacterPrecision(latitude, longitude, 4).toBinaryString();
+    }
+
+    @JsonIgnore
+    public String getWeather2HotelKey(){
+        return this.getGeoHash() + "/" + weatherDate;
+    }
 }

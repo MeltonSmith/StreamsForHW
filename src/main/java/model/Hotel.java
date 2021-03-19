@@ -9,7 +9,6 @@ import lombok.Data;
  * Date: 18.03.2021
  */
 @Data
-@JsonFormat(with = JsonFormat.Feature.ACCEPT_CASE_INSENSITIVE_PROPERTIES)
 public class Hotel {
     @JsonProperty("Id")
     private long id;
