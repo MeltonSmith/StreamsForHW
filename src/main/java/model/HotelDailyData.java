@@ -11,10 +11,10 @@ import util.wrapper.Weather2HotelKey;
 @Data
 public class HotelDailyData {
     @JsonUnwrapped
-    private Hotel hotel;
-    private String date;
-    private double avg_tmpr_f;
-    private double avg_tmpr_c;
+    private final Hotel hotel;
+    private final String date;
+    private Double avg_tmpr_f;
+    private Double avg_tmpr_c;
 
     public Weather2HotelKey getWeather2HotelKey(){
         return new Weather2HotelKey(hotel.getGeoHash(), date);

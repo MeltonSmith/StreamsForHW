@@ -5,9 +5,11 @@ import model.Hotel;
 import model.HotelDailyData;
 import model.Weather;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.protocol.types.Field;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.*;
@@ -19,6 +21,7 @@ import util.serde.StreamSerdes;
 import util.transformers.CustomTransformer;
 import util.transformers.DeduplicateTransformer;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Properties;
@@ -32,6 +35,7 @@ import static org.apache.kafka.streams.Topology.AutoOffsetReset.LATEST;
  */
 public class WeatherStateStore {
     public static final String WEATHER_RAW_TOPIC = "weather";
+    public static final String WEATHER_UNIQUE_TOPIC = "weatherUnique";
     public static final String HOTELS_TOPIC = "hotels";
 //    private final static Logger log = LoggerFactory.getLogger(WeatherStateStore.class);
     private static final Logger log = Logger.getLogger(WeatherStateStore.class);
@@ -73,20 +77,38 @@ public class WeatherStateStore {
 
         ValueJoiner<Hotel, String, HotelDailyData> hotelDailyJoiner = new Hotel2DateJoiner();
 
-        KTable<String, String> dateKTable = builder.stream(WEATHER_RAW_TOPIC,
-                Consumed.with(stringSerde, weatherSerde))
-                    .mapValues(Weather::getWeatherDate)
-                    .transformValues(DeduplicateTransformer::new, "dateStore")
-                    .filter(((key, value) -> value != null))
-                    .peek((k, v) -> log.info("Date value " + v))
-                    .toTable();
+        //TODO uncomment after NOT TRASH
+//        builder.stream(WEATHER_RAW_TOPIC,
+//                Consumed.with(stringSerde, weatherSerde))
+//                    .map((key, weather) -> KeyValue.pair("dummyKey", weather.getWeatherDate()))
+//                    .transformValues(DeduplicateTransformer::new, "dateStore")
+//                    .filter(((key, value) -> value != null))
+//                    .peek((k, v) -> log.info("Date value " + v))
+//                    .to(WEATHER_UNIQUE_TOPIC);
+
+        KStream<String, String> uniqueDates = builder.stream(WEATHER_UNIQUE_TOPIC);
+        JoinWindows twentyMinuteWindow =  JoinWindows.of(Duration.ofMinutes(20));
+
 
         builder.stream(HOTELS_TOPIC,
                 Consumed.with(stringSerde, hotelsSerde))
-                .join(dateKTable,
+                .map((key, hotel) -> KeyValue.pair("dummyKey", hotel))
+                .join(uniqueDates,
                         hotelDailyJoiner,
-                        Joined.with(stringSerde, hotelsSerde, stringSerde))
+                        twentyMinuteWindow,
+//                        Joined.with(stringSerde, hotelsSerde, stringSerde))
+                        StreamJoined.with(stringSerde, hotelsSerde, stringSerde))
                 .peek((k, v) -> log.info("v " + v));
+
+//
+//        builder.stream(HOTELS_TOPIC,
+//                Consumed.with(stringSerde, hotelsSerde))
+//                .map((key, hotel) -> KeyValue.pair("dummyKey", hotel))
+//                .leftJoin(globalTable,
+//                        (key, value) -> {
+//                            return key;
+//                        }, hotelDailyJoiner)
+//                .peek((k, v) -> log.info("v " + v));
 
 
 
@@ -114,7 +136,6 @@ public class WeatherStateStore {
 
 
         KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), getProperties());
-//        MockDataProducer.produceStockTransactions(15, 50, 25, false);
         log.info("Started");
         kafkaStreams.cleanUp();
         kafkaStreams.start();

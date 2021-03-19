@@ -10,8 +10,13 @@ import org.apache.kafka.streams.kstream.ValueJoiner;
  */
 public class Hotel2DateJoiner implements ValueJoiner<Hotel, String, HotelDailyData> {
 
+    /**
+     * @param hotel can't be null
+     * @param date can't ne null
+     * @return
+     */
     @Override
-    public HotelDailyData apply(Hotel hotel, String s) {
-        return null;
+    public HotelDailyData apply(Hotel hotel, String date) {
+        return new HotelDailyData(hotel, date);
     }
 }
