@@ -14,6 +14,7 @@ import org.apache.kafka.streams.state.Stores;
 import org.apache.log4j.Logger;
 import util.serde.StreamSerdes;
 import util.transformers.CustomTransformer;
+import util.transformers.DeduplicateTransformer;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -50,12 +51,7 @@ public class WeatherStateStore {
 //        StreamsConfig streamsConfig = new StreamsConfig(getProperties());
         Serde<String> stringSerde = Serdes.String();
         Serde<Weather> weatherSerde = StreamSerdes.weatherSerde();
-        Serde<Weather> hotelsSerde = StreamSerdes.hotelsSerde();
-
-
-
-
-
+//        Serde<Weather> hotelsSerde = StreamSerdes.hotelsSerde();
 //        JsonSerializer<Weather> purchase/**/JsonSerializer = new JsonSerializer<>();
 
         //TODO джойнит похоже что только по ключам
@@ -65,28 +61,26 @@ public class WeatherStateStore {
 
         // create store
         StoreBuilder storeBuilder = Stores.keyValueStoreBuilder(
-                Stores.persistentKeyValueStore("invStore"),
+                Stores.persistentKeyValueStore("dateStore"),
                 Serdes.String(),
                 Serdes.String());
         // register store
         builder.addStateStore(storeBuilder);
-//        builder.stream(WEATHER_RAW_TOPIC,
-//                Consumed.with(stringSerde, weatherSerde)
-//                        .withOffsetResetPolicy(EARLIEST))
-////                .mapValues(st -> st.getWeatherDate())
-//                .groupBy((k, v) -> v.getWeatherDate(), Grouped.with(stringSerde, weatherSerde))
-//                .reduce((v1, v2) -> v1 )
-//                .toStream()
-//                .peek((k, v) -> log.info("Date " + v.getWeatherDate() + "Lat " + v.getLatitude()))
-//                .to("testWeather", Produced.with(stringSerde, weatherSerde));
-
-        builder.stream(HOTELS_TOPIC,
-                Consumed.with(stringSerde, hotelsSerde) //key null
+        builder.stream("weather",
+                Consumed.with(stringSerde, weatherSerde)
                         .withOffsetResetPolicy(EARLIEST))
-                .join()
-                .transformValues(() -> new CustomTransformer())
-                .toStream()
-                .peek((k, v) -> log.info("Size " + v.size()));
+                .mapValues(Weather::getWeatherDate)
+                .transformValues(DeduplicateTransformer::new, "dateStore")
+                .filter(((key, value) -> value != null))
+                .peek((k, v) -> log.info("Date " + k + " " +v));
+
+//        builder.stream(HOTELS_TOPIC,
+//                Consumed.with(stringSerde, hotelsSerde) //key null
+//                        .withOffsetResetPolicy(EARLIEST))
+//                .join()
+//                .transformValues(() -> new CustomTransformer())
+//                .toStream()
+//                .peek((k, v) -> log.info("Size " + v.size()));
 
 
 //        KTable<String, HashMap<String, Long>> aggregate = topology.stream("input")
@@ -116,7 +110,7 @@ public class WeatherStateStore {
 
     private static Properties getProperties() {
         Properties props = new Properties();
-        props.put(StreamsConfig.APPLICATION_ID_CONFIG, "weather-aggregations");
+        props.put(StreamsConfig.APPLICATION_ID_CONFIG, "weather-test");
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "weather-aggregations-id");
         props.put(ConsumerConfig.CLIENT_ID_CONFIG, "weather-aggregations-client");
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
