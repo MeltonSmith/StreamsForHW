@@ -1,5 +1,7 @@
 package util.serde;
 
+import model.Hotel;
+import model.HotelDailyData;
 import model.Weather;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
@@ -17,9 +19,29 @@ public class StreamSerdes {
         return new WeatherSerde();
     }
 
+    public static Serde<Hotel> hotelSerde() {
+        return new HotelSerde();
+    }
+
+    public static Serde<HotelDailyData> hotelDailyDataSerde() {
+        return new HotelSerde();
+    }
+
+    private static final class HotelDailyDataSerde extends WrapperSerde<HotelDailyData> {
+        public HotelDailyDataSerde() {
+            super(new JsonSerializer<>(), new JsonDeserializer<>(HotelDailyData.class));
+        }
+    }
+
     private static final class WeatherSerde extends WrapperSerde<Weather> {
         public WeatherSerde() {
             super(new JsonSerializer<>(), new JsonDeserializer<>(Weather.class));
+        }
+    }
+
+    private static final class HotelSerde extends WrapperSerde<Hotel> {
+        public HotelSerde() {
+            super(new JsonSerializer<>(), new JsonDeserializer<>(Hotel.class));
         }
     }
 

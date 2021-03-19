@@ -1,5 +1,6 @@
 package model;
 
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import lombok.Data;
 import util.wrapper.Weather2HotelKey;
 
@@ -9,6 +10,7 @@ import util.wrapper.Weather2HotelKey;
  */
 @Data
 public class HotelDailyData {
+    @JsonUnwrapped
     private Hotel hotel;
     private String date;
     private double avg_tmpr_f;

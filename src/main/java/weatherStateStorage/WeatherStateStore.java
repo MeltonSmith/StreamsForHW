@@ -1,5 +1,8 @@
 package weatherStateStorage;
 
+import joiners.Hotel2DateJoiner;
+import model.Hotel;
+import model.HotelDailyData;
 import model.Weather;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.Serde;
@@ -51,7 +54,8 @@ public class WeatherStateStore {
 //        StreamsConfig streamsConfig = new StreamsConfig(getProperties());
         Serde<String> stringSerde = Serdes.String();
         Serde<Weather> weatherSerde = StreamSerdes.weatherSerde();
-//        Serde<Weather> hotelsSerde = StreamSerdes.hotelsSerde();
+        Serde<Hotel> hotelsSerde = StreamSerdes.hotelSerde();
+        Serde<HotelDailyData> hotelDailyDataSerde = StreamSerdes.hotelDailyDataSerde();
 //        JsonSerializer<Weather> purchase/**/JsonSerializer = new JsonSerializer<>();
 
         //TODO джойнит похоже что только по ключам
@@ -66,13 +70,25 @@ public class WeatherStateStore {
                 Serdes.String());
         // register store
         builder.addStateStore(storeBuilder);
-        builder.stream("weather",
+
+        ValueJoiner<Hotel, String, HotelDailyData> hotelDailyJoiner = new Hotel2DateJoiner();
+
+        KTable<String, String> dateKTable = builder.stream(WEATHER_RAW_TOPIC,
                 Consumed.with(stringSerde, weatherSerde)
                         .withOffsetResetPolicy(EARLIEST))
                 .mapValues(Weather::getWeatherDate)
                 .transformValues(DeduplicateTransformer::new, "dateStore")
-                .filter(((key, value) -> value != null))
-                .peek((k, v) -> log.info("Date " + k + " " +v));
+                .filter(((key, value) -> value != null)).toTable();
+
+        builder.stream(HOTELS_TOPIC,
+                Consumed.with(stringSerde, hotelsSerde)
+                        .withOffsetResetPolicy(EARLIEST))
+                .join(dateKTable,
+                        hotelDailyJoiner,
+                        Joined.with(stringSerde, hotelsSerde, stringSerde));
+
+
+
 
 //        builder.stream(HOTELS_TOPIC,
 //                Consumed.with(stringSerde, hotelsSerde) //key null
