@@ -74,18 +74,19 @@ public class WeatherStateStore {
         ValueJoiner<Hotel, String, HotelDailyData> hotelDailyJoiner = new Hotel2DateJoiner();
 
         KTable<String, String> dateKTable = builder.stream(WEATHER_RAW_TOPIC,
-                Consumed.with(stringSerde, weatherSerde)
-                        .withOffsetResetPolicy(EARLIEST))
-                .mapValues(Weather::getWeatherDate)
-                .transformValues(DeduplicateTransformer::new, "dateStore")
-                .filter(((key, value) -> value != null)).toTable();
+                Consumed.with(stringSerde, weatherSerde))
+                    .mapValues(Weather::getWeatherDate)
+                    .transformValues(DeduplicateTransformer::new, "dateStore")
+                    .filter(((key, value) -> value != null))
+                    .peek((k, v) -> log.info("Date value " + v))
+                    .toTable();
 
         builder.stream(HOTELS_TOPIC,
-                Consumed.with(stringSerde, hotelsSerde)
-                        .withOffsetResetPolicy(EARLIEST))
+                Consumed.with(stringSerde, hotelsSerde))
                 .join(dateKTable,
                         hotelDailyJoiner,
-                        Joined.with(stringSerde, hotelsSerde, stringSerde));
+                        Joined.with(stringSerde, hotelsSerde, stringSerde))
+                .peek((k, v) -> log.info("v " + v));
 
 
 
@@ -115,10 +116,23 @@ public class WeatherStateStore {
         KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), getProperties());
 //        MockDataProducer.produceStockTransactions(15, 50, 25, false);
         log.info("Started");
+        kafkaStreams.cleanUp();
         kafkaStreams.start();
-        Thread.sleep(120000);
-        log.info("Shutting down now");
-        kafkaStreams.close();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                kafkaStreams.close();
+                log.info("Stream stopped");
+            } catch (Exception exc) {
+                log.error("Got exception while executing shutdown hook: ", exc);
+            }
+        }));
+
+//        log.info("Started");
+//        kafkaStreams.start();
+//        Thread.sleep(120000);
+//        log.info("Shutting down now");
+//        kafkaStreams.close();
 //        MockDataProducer.shutdown();
 
 
@@ -129,7 +143,7 @@ public class WeatherStateStore {
         props.put(StreamsConfig.APPLICATION_ID_CONFIG, "weather-test");
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "weather-aggregations-id");
         props.put(ConsumerConfig.CLIENT_ID_CONFIG, "weather-aggregations-client");
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "30000");
         props.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, "10000");
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9094");

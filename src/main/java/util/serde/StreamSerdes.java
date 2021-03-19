@@ -24,7 +24,7 @@ public class StreamSerdes {
     }
 
     public static Serde<HotelDailyData> hotelDailyDataSerde() {
-        return new HotelSerde();
+        return new HotelDailyDataSerde();
     }
 
     private static final class HotelDailyDataSerde extends WrapperSerde<HotelDailyData> {
