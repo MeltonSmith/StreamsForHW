@@ -36,7 +36,8 @@ public class TemperatureAggregationTransformer implements ValueTransformer<Hotel
             //TODO cleanup
             Integer oldCount = countStore.get(key);
             int newCount = oldCount + 1;
-            log.info("Another join by date and geo is found...calculating average :" + newCount);
+            String name = hotelDailyData.getHotel().getName();
+            log.info("Another join by date and geo is found...calculating average, new count is.." + newCount + " Hotel is " + name +". Date is: " + hotelDailyData.getDate());
             double newAvgValueC = ((oldDailyData.getAvg_tmpr_c() * oldCount) + hotelDailyData.getAvg_tmpr_c()) / newCount;
             double newAvgValueF = ((oldDailyData.getAvg_tmpr_f() * oldCount) + hotelDailyData.getAvg_tmpr_f()) / newCount;
             oldDailyData.setAvg_tmpr_c(newAvgValueC);
@@ -44,8 +45,8 @@ public class TemperatureAggregationTransformer implements ValueTransformer<Hotel
             countStore.put(key, newCount);
             return null;
         } else{
-//            log.info("first join by date and geo");
             countStore.put(key, 1);
+            dailyDataStore.put(key, hotelDailyData);
             return hotelDailyData;
         }
     }

@@ -27,7 +27,7 @@ public class Weather {
     private String day;
 
     private String getGeoHash(){
-        return GeoHash.withCharacterPrecision(latitude, longitude, 4).toBinaryString();
+        return GeoHash.geoHashStringWithCharacterPrecision(latitude, longitude, 4);
     }
 
     @JsonIgnore

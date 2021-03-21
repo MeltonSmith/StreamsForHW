@@ -90,7 +90,7 @@ public class WeatherStateStore {
 
         JoinWindows twentyMinuteWindow =  JoinWindows.of(Duration.ofMinutes(20));
 
-        //enriching the hotel data
+        //enriching the hotel data with unique dates
        var hotelDailyStream = builder.stream(HOTELS_TOPIC,
                 Consumed.with(stringSerde, hotelsSerde))
                 .map((key, hotel) -> KeyValue.pair("dummyKey", hotel))
@@ -104,11 +104,10 @@ public class WeatherStateStore {
                                 .selectKey((k, v) -> v.getWeather2HotelKey());
 
         hotelDailyStream
-                .leftJoin(weatherStreamKey,
+                .join(weatherStreamKey,
                         (hotelDailyData, weather) -> {
-                            if (weather == null) //no join
+                            if (weather == null)  //no join
                                 return hotelDailyData;
-
                             //successful join
                             hotelDailyData.setAvg_tmpr_c(weather.getAvg_tmpr_c());
                             hotelDailyData.setAvg_tmpr_f(weather.getAvg_tmpr_f());
@@ -116,7 +115,9 @@ public class WeatherStateStore {
                         },
                         twentyMinuteWindow, StreamJoined.with(stringSerde, hotelDailyDataSerde, weatherSerde))
                 .transformValues(TemperatureAggregationTransformer::new, "tempCountStore", "dailyDataStore")
-                .peek((k, v) -> log.info("Date value of the final stream " + v));
+                .filter(((key, value) -> value != null))
+                .to("hotelDailyData", Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
+//                .peek((k, v) -> log.info("Date value of the final stream " + v));
 
 
 //
