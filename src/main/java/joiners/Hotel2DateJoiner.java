@@ -13,7 +13,7 @@ public class Hotel2DateJoiner implements ValueJoiner<Hotel, String, HotelDailyDa
     /**
      * @param hotel can't be null
      * @param date can't ne null
-     * @return
+     * @return a hotelDailyData instance (a result from the left join from hotels to weather)
      */
     @Override
     public HotelDailyData apply(Hotel hotel, String date) {

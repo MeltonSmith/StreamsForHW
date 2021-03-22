@@ -5,6 +5,8 @@ import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.state.KeyValueStore;
 
 /**
+ * Discards duplicates for weather entities.
+ *
  * Created by: Ian_Rakhmatullin
  * Date: 19.03.2021
  */

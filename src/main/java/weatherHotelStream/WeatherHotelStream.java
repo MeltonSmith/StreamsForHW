@@ -1,4 +1,4 @@
-package weatherStateStorage;
+package weatherHotelStream;
 
 import joiners.Hotel2DateJoiner;
 import model.Hotel;
@@ -26,55 +26,41 @@ import java.util.Properties;
  * Created by: Ian_Rakhmatullin
  * Date: 17.03.2021
  */
-public class WeatherStateStore {
+public class WeatherHotelStream {
     public static final String WEATHER_RAW_TOPIC = "weather";
-    public static final String WEATHER_UNIQUE_TOPIC = "weatherUnique";
     public static final String HOTELS_TOPIC = "hotels";
-//    private final static Logger log = LoggerFactory.getLogger(WeatherStateStore.class);
-    private static final Logger log = Logger.getLogger(WeatherStateStore.class);
+    private static final Logger log = Logger.getLogger(WeatherHotelStream.class);
+    public static final String DAILY_DATA_STORE = "dailyDataStore";
+    public static final String TEMP_COUNT_STORE = "tempCountStore";
 
-    public static void main(String[] args) throws Exception{
-
-//        TODO Подтянуть все даты каким-то образом в GlobalKTable (либо через Kafka топик, либо как-то еще);
-//        TODO Добавить к отелям геохеш и развернуть стрим - по одной записи на каждую дату;
-//        TODO Соединить с погодой по geohash + date;
-//        TODO Сгруппировать по geo + date, для каждой группы посчитать avg(temp). Это будет stateful transformation;
-//        TODO Результат выпустить в другой топик
-
-//        Properties config = new Properties();
-//        config.put(StreamsConfig.APPLICATION_ID_CONFIG, "kafka-streams-app-id");
-//        config.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9094");
-//        config.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 100);
-//        config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-//        config.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 10);
-
-//        StreamsConfig streamsConfig = new StreamsConfig(getProperties());
+    public static void main(String[] args){
         Serde<String> stringSerde = Serdes.String();
         Serde<Weather> weatherSerde = StreamSerdes.weatherSerde();
         Serde<Hotel> hotelsSerde = StreamSerdes.hotelSerde();
         Serde<HotelDailyData> hotelDailyDataSerde = StreamSerdes.hotelDailyDataSerde();
-//        JsonSerializer<Weather> purchase/**/JsonSerializer = new JsonSerializer<>();
-
 
         StreamsBuilder builder = new StreamsBuilder();
 
-        // create store
+        //creating stores:
+        //for unique dates
         var storeBuilder = Stores.keyValueStoreBuilder(
                 Stores.persistentKeyValueStore("dateStore"),
                 Serdes.String(),
                 Serdes.String());
 
+        //for unique hotel+day combination
         var dailyDataStore = Stores.keyValueStoreBuilder(
-                Stores.persistentKeyValueStore("dailyDataStore"),
+                Stores.persistentKeyValueStore(DAILY_DATA_STORE),
                 Serdes.String(),
                 StreamSerdes.hotelDailyDataSerde());
 
+        //for calculating average values
         var tempCountStore = Stores.keyValueStoreBuilder(
-                Stores.persistentKeyValueStore("tempCountStore"),
+                Stores.persistentKeyValueStore(TEMP_COUNT_STORE),
                 Serdes.String(),
                 Serdes.Integer());
 
-        // register store
+        // registering stores
         builder.addStateStore(storeBuilder);
         builder.addStateStore(dailyDataStore);
         builder.addStateStore(tempCountStore);
@@ -82,16 +68,13 @@ public class WeatherStateStore {
         ValueJoiner<Hotel, String, HotelDailyData> hotelDailyJoiner = new Hotel2DateJoiner();
 
         KStream<String, Weather> weatherRawStream = builder.stream(WEATHER_RAW_TOPIC, Consumed.with(stringSerde, weatherSerde));
-        var uniqueDates = weatherRawStream
-                                                .map((key, weather) -> KeyValue.pair("dummyKey", weather.getWeatherDate()))
-                                                .transformValues(DeduplicateTransformer::new, "dateStore")
-                                                .filter(((key, value) -> value != null))
-                                                .peek((k, v) -> log.info("Date value " + v));
+        var uniqueDates = getUniqueDates(weatherRawStream);
 
         JoinWindows twentyMinuteWindow =  JoinWindows.of(Duration.ofMinutes(20));
 
         //enriching the hotel data with unique dates
-       var hotelDailyStream = builder.stream(HOTELS_TOPIC,
+        //making the key the combination of date+geoHash at the end
+        var hotelDailyStream = builder.stream(HOTELS_TOPIC,
                 Consumed.with(stringSerde, hotelsSerde))
                 .map((key, hotel) -> KeyValue.pair("dummyKey", hotel))
                 .join(uniqueDates,
@@ -100,11 +83,13 @@ public class WeatherStateStore {
                         StreamJoined.with(stringSerde, hotelsSerde, stringSerde))
                 .selectKey((k, v) -> v.getHotel2WeatherKey());
 
-        KStream<String, Weather> weatherStreamKey = weatherRawStream
-                                .selectKey((k, v) -> v.getWeather2HotelKey());
+        //changing the keys from "dummy" to combination of date+geoHash
+        var weatherStreamKey = weatherRawStream
+                .selectKey((k, v) -> v.getWeather2HotelKey());
 
+        //trying to join hotels to weather (left)
         hotelDailyStream
-                .join(weatherStreamKey,
+                .leftJoin(weatherStreamKey,
                         (hotelDailyData, weather) -> {
                             if (weather == null)  //no join
                                 return hotelDailyData;
@@ -114,46 +99,9 @@ public class WeatherStateStore {
                             return hotelDailyData;
                         },
                         twentyMinuteWindow, StreamJoined.with(stringSerde, hotelDailyDataSerde, weatherSerde))
-                .transformValues(TemperatureAggregationTransformer::new, "tempCountStore", "dailyDataStore")
+                .transformValues(TemperatureAggregationTransformer::new, TEMP_COUNT_STORE, DAILY_DATA_STORE)
                 .filter(((key, value) -> value != null))
                 .to("hotelDailyData", Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
-//                .peek((k, v) -> log.info("Date value of the final stream " + v));
-
-
-//
-//        builder.stream(HOTELS_TOPIC,
-//                Consumed.with(stringSerde, hotelsSerde))
-//                .map((key, hotel) -> KeyValue.pair("dummyKey", hotel))
-//                .leftJoin(globalTable,
-//                        (key, value) -> {
-//                            return key;
-//                        }, hotelDailyJoiner)
-//                .peek((k, v) -> log.info("v " + v));
-
-
-
-
-//        builder.stream(HOTELS_TOPIC,
-//                Consumed.with(stringSerde, hotelsSerde) //key null
-//                        .withOffsetResetPolicy(EARLIEST))
-//                .join()
-//                .transformValues(() -> new CustomTransformer())
-//                .toStream()
-//                .peek((k, v) -> log.info("Size " + v.size()));
-
-
-//        KTable<String, HashMap<String, Long>> aggregate = topology.stream("input")
-//                .groupBy((k, v) -> 0 /*map all records to same, arbitrary key*/)
-//                .aggregate(() -> new HashMap<String, Long>(),
-//                        (k, v, a) -> {
-//                            Long count = a.get(v.get("state"));
-//                            if (count == null) {
-//                                count = 0L;
-//                            }
-//                            a.put(v.get("state"), ++count);
-//                            return a;
-//                        });
-
 
         KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), getProperties());
         log.info("Started");
@@ -168,15 +116,19 @@ public class WeatherStateStore {
                 log.error("Got exception while executing shutdown hook: ", exc);
             }
         }));
+    }
 
-//        log.info("Started");
-//        kafkaStreams.start();
-//        Thread.sleep(120000);
-//        log.info("Shutting down now");
-//        kafkaStreams.close();
-//        MockDataProducer.shutdown();
-
-
+    /**
+     * The main purpose - to deduplicate dates in the whole stream of weather data, taken from "weather" topic in Kafka
+     * @param weatherRawStream - raw weather data as it is in kafka
+     * @return stream of only unique dates. Key is dummy for enriching hotels with date by a join.
+     */
+    private static KStream<String, String> getUniqueDates(KStream<String, Weather> weatherRawStream) {
+        return weatherRawStream
+                .map((key, weather) -> KeyValue.pair("dummyKey", weather.getWeatherDate()))
+                .transformValues(DeduplicateTransformer::new, "dateStore")
+                .filter(((key, value) -> value != null))
+                .peek((k, v) -> log.info("Date value " + v));
     }
 
     private static Properties getProperties() {
@@ -188,7 +140,6 @@ public class WeatherStateStore {
         props.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "30000");
         props.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, "10000");
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9094");
-        props.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, "1");
         props.put(ConsumerConfig.METADATA_MAX_AGE_CONFIG, "10000");
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
         props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());

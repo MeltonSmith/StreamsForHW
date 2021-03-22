@@ -23,7 +23,6 @@ public class Hotel {
     private double latitude;
     @JsonProperty("Longitude")
     private double longitude;
-    //rounded up to 4th symbol
     @JsonProperty("GeoHash")
     private String geoHash;
 }

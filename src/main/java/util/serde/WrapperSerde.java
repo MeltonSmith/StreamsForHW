@@ -3,8 +3,6 @@ package util.serde;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
-import util.JsonDeserializer;
-import util.JsonSerializer;
 
 /**
  * Created by: Ian_Rakhmatullin
