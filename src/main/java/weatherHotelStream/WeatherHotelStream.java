@@ -81,11 +81,11 @@ public class WeatherHotelStream {
                         hotelDailyJoiner,
                         twentyMinuteWindow,
                         StreamJoined.with(stringSerde, hotelsSerde, stringSerde))
-                .selectKey((k, v) -> v.getHotel2WeatherKey());
+                .selectKey((k, v) -> v.getHotelGeo2WeatherKey());
 
         //changing the keys from "dummy" to combination of date+geoHash
         var weatherStreamKey = weatherRawStream
-                .selectKey((k, v) -> v.getWeather2HotelKey());
+                .selectKey((k, v) -> v.getWeatherGeo2HotelKey());
 
         //trying to join hotels to weather (left)
         hotelDailyStream
@@ -139,11 +139,13 @@ public class WeatherHotelStream {
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "30000");
         props.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, "10000");
+        props.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, "1");
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9094");
         props.put(ConsumerConfig.METADATA_MAX_AGE_CONFIG, "10000");
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
         props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
         props.put(StreamsConfig.REPLICATION_FACTOR_CONFIG, 1);
+        props.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, "0");
         props.put(StreamsConfig.DEFAULT_TIMESTAMP_EXTRACTOR_CLASS_CONFIG, WallclockTimestampExtractor.class);
         return props;
 

@@ -24,7 +24,24 @@ public class HotelDailyData {
      * @return Combanation of the geoHash + weatherData. Used for joining with weather entities.
      */
     @JsonIgnore
-    public String getHotel2WeatherKey(){
+    public String getHotelGeo2WeatherKey(){
         return hotel.getGeoHash() + "/" + date;
+    }
+
+    /**
+     * @return Combanation of the id + weatherData. Used for stateful operations
+     */
+    @JsonIgnore
+    public String getHotelId2WeatherKey(){
+        return hotel.getId() + "/" + date;
+    }
+
+    /**
+     * TODO
+     * @return
+     */
+    @JsonIgnore
+    public boolean isWithTemperature(){
+        return this.getAvg_tmpr_c() != null;
     }
 }

@@ -36,7 +36,7 @@ public class Weather {
      * @return Combanation of the geoHash + weatherData. Used for joining with hotel daily data entities.
      */
     @JsonIgnore
-    public String getWeather2HotelKey(){
+    public String getWeatherGeo2HotelKey(){
         return this.getGeoHash() + "/" + weatherDate;
     }
 }
