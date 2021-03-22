@@ -59,7 +59,7 @@ public class WeatherHotelStream {
         var dailyDataStore = Stores.keyValueStoreBuilder(
                 Stores.persistentKeyValueStore(DAILY_DATA_STORE),
                 Serdes.String(),
-                StreamSerdes.hotelDailyDataSerde()).build();
+                StreamSerdes.hotelDailyDataSerde());
 
 
         //for calculating average values
