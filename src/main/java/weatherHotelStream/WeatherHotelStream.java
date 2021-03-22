@@ -13,6 +13,8 @@ import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
+import org.apache.kafka.streams.state.QueryableStoreTypes;
+import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 import org.apache.kafka.streams.state.Stores;
 import org.apache.log4j.Logger;
 import util.serde.StreamSerdes;
@@ -48,17 +50,25 @@ public class WeatherHotelStream {
                 Serdes.String(),
                 Serdes.String());
 
+//        var average1 = Stores.keyValueStoreBuilder(
+//                Stores.persistentKeyValueStore("average"),
+//                Serdes.String(),
+//                StreamSerdes.hotelDailyDataSerde());
+
         //for unique hotel+day combination
         var dailyDataStore = Stores.keyValueStoreBuilder(
                 Stores.persistentKeyValueStore(DAILY_DATA_STORE),
                 Serdes.String(),
-                StreamSerdes.hotelDailyDataSerde());
+                StreamSerdes.hotelDailyDataSerde()).build();
+
 
         //for calculating average values
         var tempCountStore = Stores.keyValueStoreBuilder(
                 Stores.persistentKeyValueStore(TEMP_COUNT_STORE),
                 Serdes.String(),
                 Serdes.Integer());
+
+
 
         // registering stores
         builder.addStateStore(storeBuilder);
@@ -88,20 +98,24 @@ public class WeatherHotelStream {
                 .selectKey((k, v) -> v.getWeatherGeo2HotelKey());
 
         //trying to join hotels to weather (left)
-        hotelDailyStream
+        KTable<String, HotelDailyData> average = hotelDailyStream
                 .leftJoin(weatherStreamKey,
                         (hotelDailyData, weather) -> {
-                            if (weather == null)  //no join
-                                return hotelDailyData;
-                            //successful join
-                            hotelDailyData.setAvg_tmpr_c(weather.getAvg_tmpr_c());
-                            hotelDailyData.setAvg_tmpr_f(weather.getAvg_tmpr_f());
+                            if (weather != null) {
+                                hotelDailyData.setAvg_tmpr_c(weather.getAvg_tmpr_c());
+                                hotelDailyData.setAvg_tmpr_f(weather.getAvg_tmpr_f());
+                                hotelDailyData.setCount(1);
+                            }
                             return hotelDailyData;
                         },
                         twentyMinuteWindow, StreamJoined.with(stringSerde, hotelDailyDataSerde, weatherSerde))
-                .transformValues(TemperatureAggregationTransformer::new, TEMP_COUNT_STORE, DAILY_DATA_STORE)
-                .filter(((key, value) -> value != null))
-                .to("hotelDailyData", Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
+//                .filter(((key, value) -> value != null))
+                .groupBy((k, v) -> v.getHotelId2WeatherKey(), Grouped.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()))
+                .reduce(HotelDailyData::computeAverage, Materialized.as("average"));
+
+        average.toStream().to("newHotelDailyData",Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
+
+//                .to("newHotelDailyData", Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
 
         KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), getProperties());
         log.info("Started");

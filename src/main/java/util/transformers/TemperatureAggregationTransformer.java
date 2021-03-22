@@ -13,6 +13,7 @@ import org.apache.log4j.Logger;
  * Created by: Ian_Rakhmatullin
  * Date: 18.03.2021
  */
+@Deprecated
 public class TemperatureAggregationTransformer implements ValueTransformer<HotelDailyData, HotelDailyData>
 {
     private static final Logger log = Logger.getLogger(TemperatureAggregationTransformer.class);
