@@ -5,6 +5,8 @@ import model.Hotel;
 import model.HotelDailyData;
 import model.Weather;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
@@ -13,9 +15,8 @@ import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
-import org.apache.kafka.streams.state.QueryableStoreTypes;
-import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
-import org.apache.kafka.streams.state.Stores;
+import org.apache.kafka.streams.state.*;
+import org.apache.kafka.streams.state.internals.KeyValueStoreBuilder;
 import org.apache.log4j.Logger;
 import util.serde.StreamSerdes;
 import util.transformers.DeduplicateTransformer;
@@ -68,6 +69,11 @@ public class WeatherHotelStream {
                 Serdes.String(),
                 Serdes.Integer());
 
+        var testStore = Stores.keyValueStoreBuilder(
+                Stores.persistentKeyValueStore("test"),
+                Serdes.String(),
+                StreamSerdes.hotelDailyDataSerde());
+
 
 
         // registering stores
@@ -98,7 +104,7 @@ public class WeatherHotelStream {
                 .selectKey((k, v) -> v.getWeatherGeo2HotelKey());
 
         //trying to join hotels to weather (left)
-        KTable<String, HotelDailyData> average = hotelDailyStream
+       hotelDailyStream
                 .leftJoin(weatherStreamKey,
                         (hotelDailyData, weather) -> {
                             if (weather != null) {
@@ -111,19 +117,32 @@ public class WeatherHotelStream {
                         twentyMinuteWindow, StreamJoined.with(stringSerde, hotelDailyDataSerde, weatherSerde))
 //                .filter(((key, value) -> value != null))
                 .groupBy((k, v) -> v.getHotelId2WeatherKey(), Grouped.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()))
-                .reduce(HotelDailyData::computeAverage, Materialized.as("average"));
+                .reduce(HotelDailyData::computeAverage, Materialized.as("test"))
+                .toStream()
+                .to("hotelDailyData",Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
 
-        average.toStream().to("newHotelDailyData",Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
 
-//                .to("newHotelDailyData", Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
 
         KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), getProperties());
         log.info("Started");
         kafkaStreams.cleanUp();
         kafkaStreams.start();
 
+
+
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
+                kafkaStreams.close();
+
+                ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store("test", QueryableStoreTypes.keyValueStore());
+                KeyValueIterator<String, HotelDailyData> iterator = store.all();
+//                while (iterator.hasNext()) {
+//                    KeyValue<String, HotelDailyData> next = iterator.next();
+//
+//                }
+//                Producer<String, String> producer = new KafkaProducer<>(getProperties());
+
+                store.get("1");
                 kafkaStreams.close();
                 log.info("Stream stopped");
             } catch (Exception exc) {
