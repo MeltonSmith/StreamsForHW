@@ -8,9 +8,11 @@ import model.Weather;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
@@ -20,6 +22,7 @@ import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
 import org.apache.kafka.streams.state.*;
 import org.apache.log4j.Logger;
+import util.serde.JsonSerializer;
 import util.serde.StreamSerdes;
 import util.transformers.DeduplicateTransformer;
 
@@ -71,8 +74,9 @@ public class WeatherHotelStream {
                 Serdes.String(),
                 Serdes.Integer());
 
-        var testStore = Stores.keyValueStoreBuilder(
-                Stores.persistentKeyValueStore("test"),
+        //store for the final result
+        var finalData = Stores.keyValueStoreBuilder(
+                Stores.persistentKeyValueStore("finalData"),
                 Serdes.String(),
                 StreamSerdes.hotelDailyDataSerde());
 
@@ -131,8 +135,6 @@ public class WeatherHotelStream {
                         },
                         Materialized.with(Serdes.String(), StreamSerdes.hotelDailyDataAggregatorSerdeSerde()))
                 .mapValues(HotelDailyDataAggregator::getHotelDailyData, Materialized.<String, HotelDailyData, KeyValueStore<Bytes, byte[]>>as("test").withKeySerde(Serdes.String()).withValueSerde(StreamSerdes.hotelDailyDataSerde()));
-//                .toStream()
-//                .to("hotelDailyData", Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
 
 
 
@@ -143,9 +145,10 @@ public class WeatherHotelStream {
 
         Thread.sleep(60000);
 
-        ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store("test", QueryableStoreTypes.keyValueStore());
+        //trying to write the current state of the "finalData" store
+        ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store("finalData", QueryableStoreTypes.keyValueStore());
         KeyValueIterator<String, HotelDailyData> iterator = store.all();
-        Producer<String, HotelDailyData> producer = new KafkaProducer<>(getProperties());
+        Producer<String, HotelDailyData> producer = new KafkaProducer<>(getPropertiesForProducer());
         while (iterator.hasNext()) {
             KeyValue<String, HotelDailyData> next = iterator.next();
             send(producer, next.key, next.value);
@@ -197,6 +200,27 @@ public class WeatherHotelStream {
                 .peek((k, v) -> log.info("Date value " + v));
     }
 
+    /**
+     * Producer API config
+     */
+    private static Properties getPropertiesForProducer(){
+        Properties properties = new Properties();
+        properties.put("bootstrap.servers", "localhost:9094");
+        properties.put("acks", "all");
+        properties.put("retries", 0);
+        properties.put("batch.size", 16384);
+        properties.put("linger.ms", 1);
+        properties.put("buffer.memory", 33554432);
+
+        properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+
+        return properties;
+    }
+
+    /**
+     * Kafka streams app config
+     */
     private static Properties getProperties() {
         Properties props = new Properties();
         props.put(StreamsConfig.APPLICATION_ID_CONFIG, "weather-test");
