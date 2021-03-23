@@ -145,7 +145,7 @@ public class WeatherHotelStream {
 
         Thread.sleep(60000);
 
-        //trying to write the current state of the "finalData" store
+        //trying to write the current state of the "finalData" store to make the records unique per key(hotelId+data)
         ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store("finalData", QueryableStoreTypes.keyValueStore());
         KeyValueIterator<String, HotelDailyData> iterator = store.all();
         Producer<String, HotelDailyData> producer = new KafkaProducer<>(getPropertiesForProducer());
