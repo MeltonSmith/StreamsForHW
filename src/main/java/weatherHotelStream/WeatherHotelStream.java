@@ -11,17 +11,11 @@ import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.Metric;
-import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.utils.Bytes;
-import org.apache.kafka.streams.KafkaStreams;
-import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.streams.*;
 import org.apache.kafka.streams.kstream.*;
-import org.apache.kafka.streams.processor.ThreadMetadata;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
 import org.apache.kafka.streams.state.*;
 import org.apache.log4j.Logger;
@@ -30,25 +24,72 @@ import util.serde.StreamSerdes;
 import util.transformers.DeduplicateTransformer;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /**
  * Created by: Ian_Rakhmatullin
  * Date: 17.03.2021
  */
 public class WeatherHotelStream {
+    private static final Logger log = Logger.getLogger(WeatherHotelStream.class);
     public static final String WEATHER_RAW_TOPIC = "weather";
     public static final String HOTELS_TOPIC = "hotels";
-    private static final Logger log = Logger.getLogger(WeatherHotelStream.class);
     public static final String DAILY_DATA_STORE = "dailyDataStore";
     public static final String TEMP_COUNT_STORE = "tempCountStore";
     public static final String HOTEL_DAILY_DATA_UNIQUE = "hotelDailyDataUnique";
 
     public static void main(String[] args) throws Exception{
+        StreamsBuilder builder = getBuilder();
+
+        KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), getProperties());
+        log.info("Started");
+        kafkaStreams.cleanUp();
+        kafkaStreams.start();
+        Thread.sleep(60000);
+
+        //trying to write the current state of the "finalData" store to make the records unique per key(hotelId+data)
+        Metric metric = kafkaStreams.metrics()
+                .entrySet()
+                .stream()
+                .filter(metricNameEntry -> metricNameEntry.getKey().name().equals("process-rate"))
+                .filter(metricNameEntry -> metricNameEntry.getKey().group().equals("stream-thread-metrics"))
+                .map(Map.Entry::getValue)
+                .findFirst().orElse(null);
+
+        while(true){
+            assert metric != null;
+            if (((Double) metric.metricValue()) == 0.0d){
+                log.info("Process-rate metrics is zero, no records left, writing a final topic for hotelDailyData...");
+                //taking a stateStore for the final KTable
+                ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store(StoreQueryParameters.fromNameAndType("finalData", QueryableStoreTypes.keyValueStore()));
+                KeyValueIterator<String, HotelDailyData> iterator = store.all();
+                Producer<String, HotelDailyData> producer = new KafkaProducer<>(getPropertiesForProducer());
+                while (iterator.hasNext()) {
+                    KeyValue<String, HotelDailyData> next = iterator.next();
+                    send(producer, next.key, next.value);
+                }
+                log.info("Closing Kafka Producer");
+                producer.close();
+
+                log.info("Closing streams");
+                kafkaStreams.close();
+                break;
+            }
+        }
+
+//
+//        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+//            try {
+//                kafkaStreams.close();
+//                log.info("Stream stopped");
+//            } catch (Exception exc) {
+//                log.error("Got exception while executing shutdown hook: ", exc);
+//            }
+//        }));
+    }
+
+    private static StreamsBuilder getBuilder() {
         Serde<String> stringSerde = Serdes.String();
         Serde<Weather> weatherSerde = StreamSerdes.weatherSerde();
         Serde<Hotel> hotelsSerde = StreamSerdes.hotelSerde();
@@ -77,7 +118,7 @@ public class WeatherHotelStream {
                 Serdes.Integer());
 
         //store for the final result
-        var finalData = Stores.keyValueStoreBuilder(
+        Stores.keyValueStoreBuilder(
                 Stores.persistentKeyValueStore("finalData"),
                 Serdes.String(),
                 StreamSerdes.hotelDailyDataSerde());
@@ -110,81 +151,38 @@ public class WeatherHotelStream {
                 .selectKey((k, v) -> v.getWeatherGeo2HotelKey());
 
         //trying to join hotels to weather (left)
-       hotelDailyStream
-                .leftJoin(weatherStreamKey,
-                        (hotelDailyData, weather) -> {
-                            if (weather != null) {
-                                hotelDailyData.setAvg_tmpr_c(weather.getAvg_tmpr_c());
-                                hotelDailyData.setAvg_tmpr_f(weather.getAvg_tmpr_f());
-                                hotelDailyData.setCount(1);
-                            }
-                            return hotelDailyData;
-                        },
-                        twentyMinuteWindow, StreamJoined.with(stringSerde, hotelDailyDataSerde, weatherSerde))
-                .groupBy((k, v) -> v.getHotelId2WeatherKey(), Grouped.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()))
-                .aggregate(HotelDailyDataAggregator::new,
-                        (key, value, aggregator) -> {
-                            //init
-                            if (aggregator.getHotelDailyData() == null)
-                                aggregator.setHotelDailyData(value);
-                            //new value has temperature - recalculating the average value
-                            if (value.isWithTemperature()) {
-                                aggregator.recalculateAvg(value);
-                            }
-                            return aggregator;
-                        },
-                        Materialized.with(Serdes.String(), StreamSerdes.hotelDailyDataAggregatorSerdeSerde()))
-                .mapValues(HotelDailyDataAggregator::getHotelDailyData, Materialized.<String, HotelDailyData, KeyValueStore<Bytes, byte[]>>as("finalData").withKeySerde(Serdes.String()).withValueSerde(StreamSerdes.hotelDailyDataSerde()));
+        hotelDailyStream
+                 .leftJoin(weatherStreamKey,
+                         (hotelDailyData, weather) -> {
+                             if (weather != null) {
+                                 hotelDailyData.setAvg_tmpr_c(weather.getAvg_tmpr_c());
+                                 hotelDailyData.setAvg_tmpr_f(weather.getAvg_tmpr_f());
+                                 hotelDailyData.setCount(1);
+                             }
+                             return hotelDailyData;
+                         },
+                         twentyMinuteWindow, StreamJoined.with(stringSerde, hotelDailyDataSerde, weatherSerde))
+                 .groupBy((k, v) -> v.getHotelId2WeatherKey(), Grouped.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()))
+                 .aggregate(HotelDailyDataAggregator::new,
+                         (key, value, aggregator) -> {
+                             //init
+                             if (aggregator.getHotelDailyData() == null)
+                                 aggregator.setHotelDailyData(value);
+                             //new value has temperature - recalculating the average value
+                             if (value.isWithTemperature()) {
+                                 aggregator.recalculateAvg(value);
+                             }
+                             return aggregator;
+                         },
+                         Materialized.with(Serdes.String(), StreamSerdes.hotelDailyDataAggregatorSerdeSerde()))
+                 .mapValues(HotelDailyDataAggregator::getHotelDailyData, Materialized.<String, HotelDailyData, KeyValueStore<Bytes, byte[]>>as("finalData").withKeySerde(Serdes.String()).withValueSerde(StreamSerdes.hotelDailyDataSerde()));
 
-
-
-        KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), getProperties());
-        log.info("Started");
-        kafkaStreams.cleanUp();
-        kafkaStreams.start();
-        Thread.sleep(60000);
-
-        //trying to write the current state of the "finalData" store to make the records unique per key(hotelId+data)
-        Metric metric = kafkaStreams.metrics()
-                .entrySet()
-                .stream()
-                .filter(metricNameEntry -> metricNameEntry.getKey().name().equals("process-rate"))
-                .filter(metricNameEntry -> metricNameEntry.getKey().group().equals("stream-thread-metrics"))
-                .map(Map.Entry::getValue)
-                .findFirst().orElse(null);
-
-        while(true){
-            assert metric != null;
-            if (((Double) metric.metricValue()) == 0.0d){
-                log.info("active tasks is zero, writing a final topic for hotelDailyData");
-                //taking a stateStore for final KTable
-                ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store("finalData", QueryableStoreTypes.keyValueStore());
-                KeyValueIterator<String, HotelDailyData> iterator = store.all();
-                Producer<String, HotelDailyData> producer = new KafkaProducer<>(getPropertiesForProducer());
-                while (iterator.hasNext()) {
-                    KeyValue<String, HotelDailyData> next = iterator.next();
-                    send(producer, next.key, next.value);
-                }
-                log.info("Closing Kafka Producer");
-                producer.close();
-
-                log.info("Closing streams");
-                kafkaStreams.close();
-                break;
-            }
-        }
-
-//
-//        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-//            try {
-//                kafkaStreams.close();
-//                log.info("Stream stopped");
-//            } catch (Exception exc) {
-//                log.error("Got exception while executing shutdown hook: ", exc);
-//            }
-//        }));
+        return builder;
     }
 
+    /**
+     * Sends hotelDaily records via Producer API to a final topic
+     */
     private static void send(Producer<String, HotelDailyData> producer, String key, HotelDailyData hotelDailyData) {
         ProducerRecord<String, HotelDailyData> record = new ProducerRecord<>(HOTEL_DAILY_DATA_UNIQUE, key, hotelDailyData);
         producer.send(record);
@@ -241,6 +239,5 @@ public class WeatherHotelStream {
         props.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, "0");
         props.put(StreamsConfig.DEFAULT_TIMESTAMP_EXTRACTOR_CLASS_CONFIG, WallclockTimestampExtractor.class);
         return props;
-
     }
 }
