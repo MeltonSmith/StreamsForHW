@@ -134,7 +134,7 @@ public class WeatherHotelStream {
                             return aggregator;
                         },
                         Materialized.with(Serdes.String(), StreamSerdes.hotelDailyDataAggregatorSerdeSerde()))
-                .mapValues(HotelDailyDataAggregator::getHotelDailyData, Materialized.<String, HotelDailyData, KeyValueStore<Bytes, byte[]>>as("test").withKeySerde(Serdes.String()).withValueSerde(StreamSerdes.hotelDailyDataSerde()));
+                .mapValues(HotelDailyDataAggregator::getHotelDailyData, Materialized.<String, HotelDailyData, KeyValueStore<Bytes, byte[]>>as("finalData").withKeySerde(Serdes.String()).withValueSerde(StreamSerdes.hotelDailyDataSerde()));
 
 
 
