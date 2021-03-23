@@ -1,5 +1,6 @@
 package util.transformers;
 
+import model.Weather;
 import org.apache.kafka.streams.kstream.ValueTransformer;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.state.KeyValueStore;
@@ -10,9 +11,9 @@ import org.apache.kafka.streams.state.KeyValueStore;
  * Created by: Ian_Rakhmatullin
  * Date: 19.03.2021
  */
-public class DeduplicateTransformer implements ValueTransformer<String, String> {
+public class DeduplicateTransformer implements ValueTransformer<Weather, Weather> {
 
-    private KeyValueStore<String, String> dateStore;
+    private KeyValueStore<String, Weather> dateStore;
     private ProcessorContext context;
     @Override
     public void init(ProcessorContext context) {
@@ -21,13 +22,14 @@ public class DeduplicateTransformer implements ValueTransformer<String, String> 
     }
 
     @Override
-    public String transform(String value) {
-        final String output;
-        if (dateStore.get(value) != null) {
+    public Weather transform(Weather value) {
+        Weather output;
+        String key = value.getWeatherDate();
+        if (dateStore.get(key) != null) {
             output = null; //discard the record
         } else {
             output = value;
-            dateStore.put(value, value);
+            dateStore.put(key, value);
         }
         return output;
     }

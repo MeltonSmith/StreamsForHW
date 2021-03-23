@@ -37,7 +37,8 @@ public class WeatherHotelStream {
     public static final String HOTELS_TOPIC = "hotels";
     public static final String DAILY_DATA_STORE = "dailyDataStore";
     public static final String TEMP_COUNT_STORE = "tempCountStore";
-    public static final String HOTEL_DAILY_DATA_UNIQUE = "hotelDailyDataUnique";
+    public static final String HOTEL_DAILY_DATA = "hotelDailyData";
+    public static final String DATE_STORE = "dateStore";
 
     public static void main(String[] args) throws Exception{
         StreamsBuilder builder = getBuilder();
@@ -78,7 +79,6 @@ public class WeatherHotelStream {
             }
         }
 
-//
 //        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 //            try {
 //                kafkaStreams.close();
@@ -89,6 +89,9 @@ public class WeatherHotelStream {
 //        }));
     }
 
+    /**
+     * Creates the needed topology
+     */
     private static StreamsBuilder getBuilder() {
         Serde<String> stringSerde = Serdes.String();
         Serde<Weather> weatherSerde = StreamSerdes.weatherSerde();
@@ -99,10 +102,10 @@ public class WeatherHotelStream {
 
         //creating stores:
         //for unique dates
-        var storeBuilder = Stores.keyValueStoreBuilder(
-                Stores.persistentKeyValueStore("dateStore"),
+        var dateStore = Stores.keyValueStoreBuilder(
+                Stores.persistentKeyValueStore(DATE_STORE),
                 Serdes.String(),
-                Serdes.String());
+                StreamSerdes.weatherSerde());
 
         //for unique hotel+day combination
         var dailyDataStore = Stores.keyValueStoreBuilder(
@@ -124,11 +127,11 @@ public class WeatherHotelStream {
                 StreamSerdes.hotelDailyDataSerde());
 
         // registering stores
-        builder.addStateStore(storeBuilder);
+        builder.addStateStore(dateStore);
         builder.addStateStore(dailyDataStore);
         builder.addStateStore(tempCountStore);
 
-        ValueJoiner<Hotel, String, HotelDailyData> hotelDailyJoiner = new Hotel2DateJoiner();
+        ValueJoiner<Hotel, Weather, HotelDailyData> hotelDailyJoiner = new Hotel2DateJoiner();
 
         KStream<String, Weather> weatherRawStream = builder.stream(WEATHER_RAW_TOPIC, Consumed.with(stringSerde, weatherSerde));
         var uniqueDates = getUniqueDates(weatherRawStream);
@@ -143,7 +146,7 @@ public class WeatherHotelStream {
                 .join(uniqueDates,
                         hotelDailyJoiner,
                         twentyMinuteWindow,
-                        StreamJoined.with(stringSerde, hotelsSerde, stringSerde))
+                        StreamJoined.with(stringSerde, hotelsSerde, weatherSerde))
                 .selectKey((k, v) -> v.getHotelGeo2WeatherKey());
 
         //changing the keys from "dummy" to combination of date+geoHash
@@ -157,7 +160,6 @@ public class WeatherHotelStream {
                              if (weather != null) {
                                  hotelDailyData.setAvg_tmpr_c(weather.getAvg_tmpr_c());
                                  hotelDailyData.setAvg_tmpr_f(weather.getAvg_tmpr_f());
-                                 hotelDailyData.setCount(1);
                              }
                              return hotelDailyData;
                          },
@@ -165,7 +167,7 @@ public class WeatherHotelStream {
                  .groupBy((k, v) -> v.getHotelId2WeatherKey(), Grouped.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()))
                  .aggregate(HotelDailyDataAggregator::new,
                          (key, value, aggregator) -> {
-                             //init
+                             //init aggregator
                              if (aggregator.getHotelDailyData() == null)
                                  aggregator.setHotelDailyData(value);
                              //new value has temperature - recalculating the average value
@@ -184,7 +186,7 @@ public class WeatherHotelStream {
      * Sends hotelDaily records via Producer API to a final topic
      */
     private static void send(Producer<String, HotelDailyData> producer, String key, HotelDailyData hotelDailyData) {
-        ProducerRecord<String, HotelDailyData> record = new ProducerRecord<>(HOTEL_DAILY_DATA_UNIQUE, key, hotelDailyData);
+        ProducerRecord<String, HotelDailyData> record = new ProducerRecord<>(HOTEL_DAILY_DATA, key, hotelDailyData);
         producer.send(record);
     }
 
@@ -193,9 +195,9 @@ public class WeatherHotelStream {
      * @param weatherRawStream - raw weather data as it is in kafka
      * @return stream of only unique dates. Key is dummy for enriching hotels with date by a join.
      */
-    private static KStream<String, String> getUniqueDates(KStream<String, Weather> weatherRawStream) {
+    private static KStream<String, Weather> getUniqueDates(KStream<String, Weather> weatherRawStream) {
         return weatherRawStream
-                .map((key, weather) -> KeyValue.pair("dummyKey", weather.getWeatherDate()))
+                .map((key, weather) -> KeyValue.pair("dummyKey", weather))
                 .transformValues(DeduplicateTransformer::new, "dateStore")
                 .filter(((key, value) -> value != null))
                 .peek((k, v) -> log.info("Date value " + v));

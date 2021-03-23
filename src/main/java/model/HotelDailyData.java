@@ -1,6 +1,7 @@
 package model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import lombok.*;
 import org.apache.log4j.Logger;
@@ -12,19 +13,29 @@ import org.apache.log4j.Logger;
  */
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
 public class HotelDailyData {
     private static final Logger log = Logger.getLogger(HotelDailyData.class);
 
     @JsonUnwrapped
     private Hotel hotel;
-    private String date;
     private Double avg_tmpr_f;
     private Double avg_tmpr_c;
+    @JsonProperty("wthr_date")
+    private String date;
+    private String year;
+    private String month;
+    private String day;
 
-    @JsonIgnore
-    @Getter(AccessLevel.NONE)
-    private int count;
+    /**
+     * Only date is taken from the weather parameter, since we only want to enrich hotel data with unique dates via cross join.
+     */
+    public HotelDailyData(Hotel hotel, Weather weather){
+        this.hotel = hotel;
+        this.date = weather.getWeatherDate();
+        this.year = weather.getYear();
+        this.month = weather.getMonth();
+        this.day = weather.getDay();
+    }
 
     /**
      * @return Combination of the geoHash + weatherData. Used for joining with weather entities.
@@ -35,7 +46,7 @@ public class HotelDailyData {
     }
 
     /**
-     * @return Combination of the id + weatherData. Used for stateful operations
+     * @return Combination of the id + weatherData. Used for stateful operations.
      */
     @JsonIgnore
     public String getHotelId2WeatherKey(){
@@ -43,13 +54,10 @@ public class HotelDailyData {
     }
 
     /**
-     * @return Defines whether this has temperature data.
+     * @return Defines whether this daily data has temperature.
      */
     @JsonIgnore
     public boolean isWithTemperature(){
         return this.getAvg_tmpr_c() != null;
     }
-
-
-
 }

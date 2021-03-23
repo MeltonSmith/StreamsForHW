@@ -2,11 +2,9 @@ package model;
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import lombok.Data;
-import lombok.RequiredArgsConstructor;
 import org.apache.log4j.Logger;
 
 import java.util.Optional;
-import java.util.function.Consumer;
 
 /**
  * Class-aggregator for calculating averag temperatures of hotel daily data
