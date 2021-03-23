@@ -2,6 +2,7 @@ package util.serde;
 
 import model.Hotel;
 import model.HotelDailyData;
+import model.HotelDailyDataAggregator;
 import model.Weather;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
@@ -23,6 +24,16 @@ public class StreamSerdes {
 
     public static Serde<HotelDailyData> hotelDailyDataSerde() {
         return new HotelDailyDataSerde();
+    }
+
+    public static Serde<HotelDailyDataAggregator> hotelDailyDataAggregatorSerdeSerde() {
+        return new HotelDailyAggregatorSerde();
+    }
+
+    private static final class HotelDailyAggregatorSerde extends WrapperSerde<HotelDailyDataAggregator> {
+        public HotelDailyAggregatorSerde() {
+            super(new JsonSerializer<>(), new JsonDeserializer<>(HotelDailyDataAggregator.class));
+        }
     }
 
     private static final class HotelDailyDataSerde extends WrapperSerde<HotelDailyData> {

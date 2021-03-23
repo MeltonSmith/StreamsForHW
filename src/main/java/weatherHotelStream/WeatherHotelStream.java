@@ -3,10 +3,9 @@ package weatherHotelStream;
 import joiners.Hotel2DateJoiner;
 import model.Hotel;
 import model.HotelDailyData;
+import model.HotelDailyDataAggregator;
 import model.Weather;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
@@ -16,14 +15,13 @@ import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
 import org.apache.kafka.streams.state.*;
-import org.apache.kafka.streams.state.internals.KeyValueStoreBuilder;
 import org.apache.log4j.Logger;
 import util.serde.StreamSerdes;
 import util.transformers.DeduplicateTransformer;
-import util.transformers.TemperatureAggregationTransformer;
 
 import java.time.Duration;
 import java.util.Properties;
+import java.util.function.Consumer;
 
 /**
  * Created by: Ian_Rakhmatullin
@@ -115,11 +113,22 @@ public class WeatherHotelStream {
                             return hotelDailyData;
                         },
                         twentyMinuteWindow, StreamJoined.with(stringSerde, hotelDailyDataSerde, weatherSerde))
-//                .filter(((key, value) -> value != null))
                 .groupBy((k, v) -> v.getHotelId2WeatherKey(), Grouped.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()))
-                .reduce(HotelDailyData::computeAverage, Materialized.as("test"))
+                .aggregate(HotelDailyDataAggregator::new,
+                        (key, value, aggregator) -> {
+                            //init
+                            if (aggregator.getHotelDailyData() == null)
+                                aggregator.setHotelDailyData(value);
+                            //new value has temperature - recalculating the average value
+                            if (value.isWithTemperature()) {
+                                aggregator.recalculateAvg(value);
+                            }
+                            return aggregator;
+                        },
+                        Materialized.with(Serdes.String(), StreamSerdes.hotelDailyDataAggregatorSerdeSerde()))
+                .mapValues(HotelDailyDataAggregator::getHotelDailyData)
                 .toStream()
-                .to("hotelDailyData",Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
+                .to("hotelDailyData", Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
 
 
 
@@ -149,6 +158,10 @@ public class WeatherHotelStream {
                 log.error("Got exception while executing shutdown hook: ", exc);
             }
         }));
+    }
+
+    private static Consumer<Double> getDoubleConsumer(HotelDailyData value, int currentCount, int newCount, HotelDailyData hotelDailyData) {
+        return a -> hotelDailyData.setAvg_tmpr_c(((a * currentCount) + value.getAvg_tmpr_c()) / newCount);
     }
 
     /**
