@@ -10,6 +10,8 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.Metric;
+import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -19,6 +21,7 @@ import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.processor.ThreadMetadata;
 import org.apache.kafka.streams.processor.WallclockTimestampExtractor;
 import org.apache.kafka.streams.state.*;
 import org.apache.log4j.Logger;
@@ -27,8 +30,11 @@ import util.serde.StreamSerdes;
 import util.transformers.DeduplicateTransformer;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * Created by: Ian_Rakhmatullin
@@ -40,6 +46,7 @@ public class WeatherHotelStream {
     private static final Logger log = Logger.getLogger(WeatherHotelStream.class);
     public static final String DAILY_DATA_STORE = "dailyDataStore";
     public static final String TEMP_COUNT_STORE = "tempCountStore";
+    public static final String HOTEL_DAILY_DATA_UNIQUE = "hotelDailyDataUnique";
 
     public static void main(String[] args) throws Exception{
         Serde<String> stringSerde = Serdes.String();
@@ -55,11 +62,6 @@ public class WeatherHotelStream {
                 Stores.persistentKeyValueStore("dateStore"),
                 Serdes.String(),
                 Serdes.String());
-
-//        var average1 = Stores.keyValueStoreBuilder(
-//                Stores.persistentKeyValueStore("average"),
-//                Serdes.String(),
-//                StreamSerdes.hotelDailyDataSerde());
 
         //for unique hotel+day combination
         var dailyDataStore = Stores.keyValueStoreBuilder(
@@ -79,8 +81,6 @@ public class WeatherHotelStream {
                 Stores.persistentKeyValueStore("finalData"),
                 Serdes.String(),
                 StreamSerdes.hotelDailyDataSerde());
-
-
 
         // registering stores
         builder.addStateStore(storeBuilder);
@@ -142,38 +142,41 @@ public class WeatherHotelStream {
         log.info("Started");
         kafkaStreams.cleanUp();
         kafkaStreams.start();
-
         Thread.sleep(60000);
 
         //trying to write the current state of the "finalData" store to make the records unique per key(hotelId+data)
-        ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store("finalData", QueryableStoreTypes.keyValueStore());
-        KeyValueIterator<String, HotelDailyData> iterator = store.all();
-        Producer<String, HotelDailyData> producer = new KafkaProducer<>(getPropertiesForProducer());
-        while (iterator.hasNext()) {
-            KeyValue<String, HotelDailyData> next = iterator.next();
-            send(producer, next.key, next.value);
+        Metric metric = kafkaStreams.metrics()
+                .entrySet()
+                .stream()
+                .filter(metricNameEntry -> metricNameEntry.getKey().name().equals("process-rate"))
+                .filter(metricNameEntry -> metricNameEntry.getKey().group().equals("stream-thread-metrics"))
+                .map(Map.Entry::getValue)
+                .findFirst().orElse(null);
+
+        while(true){
+            assert metric != null;
+            if (((Double) metric.metricValue()) == 0.0d){
+                log.info("active tasks is zero, writing a final topic for hotelDailyData");
+                //taking a stateStore for final KTable
+                ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store("finalData", QueryableStoreTypes.keyValueStore());
+                KeyValueIterator<String, HotelDailyData> iterator = store.all();
+                Producer<String, HotelDailyData> producer = new KafkaProducer<>(getPropertiesForProducer());
+                while (iterator.hasNext()) {
+                    KeyValue<String, HotelDailyData> next = iterator.next();
+                    send(producer, next.key, next.value);
+                }
+                log.info("Closing Kafka Producer");
+                producer.close();
+
+                log.info("Closing streams");
+                kafkaStreams.close();
+                break;
+            }
         }
-
-        log.info("Closing Kafka Producer");
-        producer.close();
-
-        log.info("closed");
-        kafkaStreams.close();
 
 //
 //        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 //            try {
-//                kafkaStreams.close();
-//
-//                ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store("test", QueryableStoreTypes.keyValueStore());
-//                KeyValueIterator<String, HotelDailyData> iterator = store.all();
-//                while (iterator.hasNext()) {
-//                    KeyValue<String, HotelDailyData> next = iterator.next();
-//
-//                }
-//                Producer<String, String> producer = new KafkaProducer<>(getProperties());
-//
-//                store.get("1");
 //                kafkaStreams.close();
 //                log.info("Stream stopped");
 //            } catch (Exception exc) {
@@ -183,7 +186,7 @@ public class WeatherHotelStream {
     }
 
     private static void send(Producer<String, HotelDailyData> producer, String key, HotelDailyData hotelDailyData) {
-        ProducerRecord<String, HotelDailyData> record = new ProducerRecord<>("hotelDailyDataUnique", key, hotelDailyData);
+        ProducerRecord<String, HotelDailyData> record = new ProducerRecord<>(HOTEL_DAILY_DATA_UNIQUE, key, hotelDailyData);
         producer.send(record);
     }
 
