@@ -6,8 +6,12 @@ import model.HotelDailyData;
 import model.HotelDailyDataAggregator;
 import model.Weather;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -34,7 +38,7 @@ public class WeatherHotelStream {
     public static final String DAILY_DATA_STORE = "dailyDataStore";
     public static final String TEMP_COUNT_STORE = "tempCountStore";
 
-    public static void main(String[] args){
+    public static void main(String[] args) throws Exception{
         Serde<String> stringSerde = Serdes.String();
         Serde<Weather> weatherSerde = StreamSerdes.weatherSerde();
         Serde<Hotel> hotelsSerde = StreamSerdes.hotelSerde();
@@ -126,9 +130,9 @@ public class WeatherHotelStream {
                             return aggregator;
                         },
                         Materialized.with(Serdes.String(), StreamSerdes.hotelDailyDataAggregatorSerdeSerde()))
-                .mapValues(HotelDailyDataAggregator::getHotelDailyData)
-                .toStream()
-                .to("hotelDailyData", Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
+                .mapValues(HotelDailyDataAggregator::getHotelDailyData, Materialized.<String, HotelDailyData, KeyValueStore<Bytes, byte[]>>as("test").withKeySerde(Serdes.String()).withValueSerde(StreamSerdes.hotelDailyDataSerde()));
+//                .toStream()
+//                .to("hotelDailyData", Produced.with(Serdes.String(), StreamSerdes.hotelDailyDataSerde()));
 
 
 
@@ -137,31 +141,47 @@ public class WeatherHotelStream {
         kafkaStreams.cleanUp();
         kafkaStreams.start();
 
+        Thread.sleep(60000);
 
+        ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store("test", QueryableStoreTypes.keyValueStore());
+        KeyValueIterator<String, HotelDailyData> iterator = store.all();
+        Producer<String, HotelDailyData> producer = new KafkaProducer<>(getProperties());
+        while (iterator.hasNext()) {
+            KeyValue<String, HotelDailyData> next = iterator.next();
+            send(producer, next.key, next.value);
+        }
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                kafkaStreams.close();
+        log.info("Closing Kafka Producer");
+        producer.close();
 
-                ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store("test", QueryableStoreTypes.keyValueStore());
-                KeyValueIterator<String, HotelDailyData> iterator = store.all();
+        log.info("closed");
+        kafkaStreams.close();
+
+//
+//        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+//            try {
+//                kafkaStreams.close();
+//
+//                ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store("test", QueryableStoreTypes.keyValueStore());
+//                KeyValueIterator<String, HotelDailyData> iterator = store.all();
 //                while (iterator.hasNext()) {
 //                    KeyValue<String, HotelDailyData> next = iterator.next();
 //
 //                }
 //                Producer<String, String> producer = new KafkaProducer<>(getProperties());
-
-                store.get("1");
-                kafkaStreams.close();
-                log.info("Stream stopped");
-            } catch (Exception exc) {
-                log.error("Got exception while executing shutdown hook: ", exc);
-            }
-        }));
+//
+//                store.get("1");
+//                kafkaStreams.close();
+//                log.info("Stream stopped");
+//            } catch (Exception exc) {
+//                log.error("Got exception while executing shutdown hook: ", exc);
+//            }
+//        }));
     }
 
-    private static Consumer<Double> getDoubleConsumer(HotelDailyData value, int currentCount, int newCount, HotelDailyData hotelDailyData) {
-        return a -> hotelDailyData.setAvg_tmpr_c(((a * currentCount) + value.getAvg_tmpr_c()) / newCount);
+    private static void send(Producer<String, HotelDailyData> producer, String key, HotelDailyData hotelDailyData) {
+        ProducerRecord<String, HotelDailyData> record = new ProducerRecord<>("hotelDailyDataUnique", key, hotelDailyData);
+        producer.send(record);
     }
 
     /**
