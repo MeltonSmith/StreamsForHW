@@ -5,6 +5,8 @@ import org.apache.kafka.streams.kstream.ValueTransformer;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.state.KeyValueStore;
 
+import static weatherHotelStream.WeatherHotelStream.DATE_STORE;
+
 /**
  * Discards duplicates for weather entities.
  *
@@ -18,7 +20,7 @@ public class DeduplicateTransformer implements ValueTransformer<Weather, Weather
     @Override
     public void init(ProcessorContext context) {
         this.context = context;
-        this.dateStore = context.getStateStore("dateStore");
+        this.dateStore = context.getStateStore(DATE_STORE);
     }
 
     @Override

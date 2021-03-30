@@ -1,10 +1,7 @@
 package weatherHotelStream;
 
-import joiners.Hotel2DateJoiner;
-import model.Hotel;
-import model.HotelDailyData;
-import model.HotelDailyDataAggregator;
-import model.Weather;
+import joiners.Hotel2DayJoiner;
+import model.*;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
@@ -21,7 +18,6 @@ import org.apache.kafka.streams.state.*;
 import org.apache.log4j.Logger;
 import util.serde.JsonSerializer;
 import util.serde.StreamSerdes;
-import util.transformers.DeduplicateTransformer;
 
 import java.time.Duration;
 import java.util.Map;
@@ -33,12 +29,13 @@ import java.util.Properties;
  */
 public class WeatherHotelStream {
     private static final Logger log = Logger.getLogger(WeatherHotelStream.class);
-    public static final String WEATHER_RAW_TOPIC = "weather";
+    //TODO
+    public static final String WEATHER_RAW_TOPIC = "weather_trunc";
     public static final String HOTELS_TOPIC = "hotels";
-    public static final String DAILY_DATA_STORE = "dailyDataStore";
-    public static final String TEMP_COUNT_STORE = "tempCountStore";
     public static final String HOTEL_DAILY_DATA = "hotelDailyData";
+//    public static final String HOTEL_DAILY_DATA_TEST = "hotelDailyDataTest";
     public static final String DATE_STORE = "dateStore";
+    public static final String DAYS_UNIQUE = "daysUnique";
 
     public static void main(String[] args) throws Exception{
         StreamsBuilder builder = getBuilder();
@@ -102,23 +99,23 @@ public class WeatherHotelStream {
 
         //creating stores:
         //for unique dates
-        var dateStore = Stores.keyValueStoreBuilder(
-                Stores.persistentKeyValueStore(DATE_STORE),
-                Serdes.String(),
-                StreamSerdes.weatherSerde());
-
-        //for unique hotel+day combination
-        var dailyDataStore = Stores.keyValueStoreBuilder(
-                Stores.persistentKeyValueStore(DAILY_DATA_STORE),
-                Serdes.String(),
-                StreamSerdes.hotelDailyDataSerde());
-
-
-        //for calculating average values
-        var tempCountStore = Stores.keyValueStoreBuilder(
-                Stores.persistentKeyValueStore(TEMP_COUNT_STORE),
-                Serdes.String(),
-                Serdes.Integer());
+//        var dateStore = Stores.keyValueStoreBuilder(
+//                Stores.persistentKeyValueStore(DATE_STORE),
+//                Serdes.String(),
+//                StreamSerdes.weatherSerde());
+//
+//        //for unique hotel+day combination
+//        var dailyDataStore = Stores.keyValueStoreBuilder(
+//                Stores.persistentKeyValueStore(DAILY_DATA_STORE),
+//                Serdes.String(),
+//                StreamSerdes.hotelDailyDataSerde());
+//
+//
+//        //for calculating average values
+//        var tempCountStore = Stores.keyValueStoreBuilder(
+//                Stores.persistentKeyValueStore(TEMP_COUNT_STORE),
+//                Serdes.String(),
+//                Serdes.Integer());
 
         //store for the final result
         Stores.keyValueStoreBuilder(
@@ -127,28 +124,29 @@ public class WeatherHotelStream {
                 StreamSerdes.hotelDailyDataSerde());
 
         // registering stores
-        builder.addStateStore(dateStore);
-        builder.addStateStore(dailyDataStore);
-        builder.addStateStore(tempCountStore);
+//        builder.addStateStore(dateStore);
+//        builder.addStateStore(dailyDataStore);
+//        builder.addStateStore(tempCountStore);
 
-        ValueJoiner<Hotel, Weather, HotelDailyData> hotelDailyJoiner = new Hotel2DateJoiner();
+        ValueJoiner<Hotel, Day, HotelDailyData> hotelDailyJoiner = new Hotel2DayJoiner();
 
-        KStream<String, Weather> weatherRawStream = builder.stream(WEATHER_RAW_TOPIC, Consumed.with(stringSerde, weatherSerde));
-        var uniqueDates = getUniqueDates(weatherRawStream);
 
+//        getUniqueDates(weatherRawStream);
+
+        var uniqueDaysGTable = builder.globalTable(DAYS_UNIQUE, Consumed.with(Serdes.String(), StreamSerdes.daySerde()));
         JoinWindows twentyMinuteWindow =  JoinWindows.of(Duration.ofMinutes(20));
 
         //enriching the hotel data with unique dates
         //making the key the combination of date+geoHash at the end
         var hotelDailyStream = builder.stream(HOTELS_TOPIC,
                 Consumed.with(stringSerde, hotelsSerde))
-                .map((key, hotel) -> KeyValue.pair("dummyKey", hotel))
-                .join(uniqueDates,
-                        hotelDailyJoiner,
-                        twentyMinuteWindow,
-                        StreamJoined.with(stringSerde, hotelsSerde, weatherSerde))
+//                .map((key, hotel) -> KeyValue.pair("dummyKey", hotel))
+                .join(uniqueDaysGTable,
+                        (k,v) -> ("dummy"), //to get a cross join
+                        hotelDailyJoiner)
                 .selectKey((k, v) -> v.getHotelGeo2WeatherKey());
 
+        KStream<String, Weather> weatherRawStream = builder.stream(WEATHER_RAW_TOPIC, Consumed.with(stringSerde, weatherSerde));
         //changing the keys from "dummy" to combination of date+geoHash
         var weatherStreamKey = weatherRawStream
                 .selectKey((k, v) -> v.getWeatherGeo2HotelKey());
@@ -173,6 +171,7 @@ public class WeatherHotelStream {
                              //new value has temperature - recalculating the average value
                              if (value.isWithTemperature()) {
                                  aggregator.recalculateAvg(value);
+
                              }
                              return aggregator;
                          },
@@ -190,18 +189,22 @@ public class WeatherHotelStream {
         producer.send(record);
     }
 
-    /**
-     * The main purpose - to deduplicate dates in the whole stream of weather data, taken from "weather" topic in Kafka
-     * @param weatherRawStream - raw weather data as it is in kafka
-     * @return stream of only unique dates. Key is dummy for enriching hotels with date by a join.
-     */
-    private static KStream<String, Weather> getUniqueDates(KStream<String, Weather> weatherRawStream) {
-        return weatherRawStream
-                .map((key, weather) -> KeyValue.pair("dummyKey", weather))
-                .transformValues(DeduplicateTransformer::new, "dateStore")
-                .filter(((key, value) -> value != null))
-                .peek((k, v) -> log.info("Date value " + v));
-    }
+//    /**
+//     * The main purpose - to deduplicate dates in the whole stream of weather data, taken from "weather" topic in Kafka
+//     * @param weatherRawStream - raw weather data as it is in kafka
+//     * @return stream of only unique dates. Key is dummy for enriching hotels with date by a join.
+//     */
+//    private static void getUniqueDates(KStream<String, Weather> weatherRawStream) {
+//
+//
+//
+//         weatherRawStream
+//                .map((key, weather) -> KeyValue.pair("dummyKey", weather))
+//                .transformValues(DeduplicateTransformer::new, DATE_STORE)
+//                .filter(((key, value) -> value != null))
+//                .peek((k, v) -> log.info("Date value " + v))
+//                .to(WEATHER_UNIQUE, Produced.with(Serdes.String(), StreamSerdes.weatherSerde()));
+//    }
 
     /**
      * Producer API config
@@ -227,19 +230,19 @@ public class WeatherHotelStream {
     private static Properties getProperties() {
         Properties props = new Properties();
         props.put(StreamsConfig.APPLICATION_ID_CONFIG, "weather-test");
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "weather-aggregations-id");
-        props.put(ConsumerConfig.CLIENT_ID_CONFIG, "weather-aggregations-client");
+//        props.put(ConsumerConfig.GROUP_ID_CONFIG, "weather-aggregations-id");
+//        props.put(ConsumerConfig.CLIENT_ID_CONFIG, "weather-aggregations-client");
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        props.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "30000");
-        props.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, "10000");
-        props.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, "1");
+//        props.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "30000");
+        props.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 100);
+        props.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, 8);
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9094");
-        props.put(ConsumerConfig.METADATA_MAX_AGE_CONFIG, "10000");
+//        props.put(ConsumerConfig.METADATA_MAX_AGE_CONFIG, "10000");
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
         props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
-        props.put(StreamsConfig.REPLICATION_FACTOR_CONFIG, 1);
-        props.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, "0");
-        props.put(StreamsConfig.DEFAULT_TIMESTAMP_EXTRACTOR_CLASS_CONFIG, WallclockTimestampExtractor.class);
+//        props.put(StreamsConfig.REPLICATION_FACTOR_CONFIG, 1);
+//        props.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, "0");
+//        props.put(StreamsConfig.DEFAULT_TIMESTAMP_EXTRACTOR_CLASS_CONFIG, WallclockTimestampExtractor.class);
         return props;
     }
 }

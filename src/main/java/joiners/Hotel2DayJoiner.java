@@ -1,15 +1,15 @@
 package joiners;
 
+import model.Day;
 import model.Hotel;
 import model.HotelDailyData;
-import model.Weather;
 import org.apache.kafka.streams.kstream.ValueJoiner;
 
 /**
  * Created by: Ian_Rakhmatullin
  * Date: 19.03.2021
  */
-public class Hotel2DateJoiner implements ValueJoiner<Hotel, Weather, HotelDailyData> {
+public class Hotel2DayJoiner implements ValueJoiner<Hotel, Day, HotelDailyData> {
 
     /**
      * This method creates an instance of the HotelDailyData class, for combination of hotel + date.
@@ -20,7 +20,7 @@ public class Hotel2DateJoiner implements ValueJoiner<Hotel, Weather, HotelDailyD
      * @return a hotelDailyData instance (a result from the cross join from hotels to weather)
      */
     @Override
-    public HotelDailyData apply(Hotel hotel, Weather weather) {
-        return new HotelDailyData(hotel, weather);
+    public HotelDailyData apply(Hotel hotel, Day day) {
+        return new HotelDailyData(hotel, day);
     }
 }

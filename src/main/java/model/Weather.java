@@ -5,6 +5,7 @@ import ch.hsr.geohash.GeoHash;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
+import org.apache.log4j.Logger;
 
 /**
  * Created by: Ian_Rakhmatullin
@@ -13,6 +14,9 @@ import lombok.Data;
 
 @Data
 public class Weather {
+    private static final Logger log = Logger.getLogger(Weather.class);
+    private static int COUNT = 0;
+
     @JsonProperty("lat")
     private double latitude;
     @JsonProperty("lng")
@@ -37,6 +41,12 @@ public class Weather {
      */
     @JsonIgnore
     public String getWeatherGeo2HotelKey(){
+        COUNT++;
+        if (COUNT % 1000 == 0) {
+            log.info("Count is " + COUNT);
+        }
+
+//        log.info("generating geoKey for " + this.getWeatherDate() + " lat " + getLatitude());
         return this.getGeoHash() + "/" + weatherDate;
     }
 }
