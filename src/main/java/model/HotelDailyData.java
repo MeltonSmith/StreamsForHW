@@ -29,12 +29,12 @@ public class HotelDailyData {
     /**
      * Only date is taken from the weather parameter, since we only want to enrich hotel data with unique dates via cross join.
      */
-    public HotelDailyData(Hotel hotel, Day day){
+    public HotelDailyData(Hotel hotel, DayWrapper dayWrapper){
         this.hotel = hotel;
-        this.date = day.getFormattedDate();
-        this.year = day.getYear();
-        this.month = day.getMonth();
-        this.day = day.getDay();
+        this.date = dayWrapper.getFormattedDate();
+        this.year = dayWrapper.getYear();
+        this.month = dayWrapper.getMonth();
+        this.day = dayWrapper.getDay();
     }
 
     /**

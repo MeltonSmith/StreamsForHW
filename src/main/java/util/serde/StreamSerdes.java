@@ -23,7 +23,7 @@ public class StreamSerdes {
         return new HotelDailyDataSerde();
     }
 
-    public static Serde<Day> daySerde() {
+    public static Serde<DayWrapper> daySerde() {
         return new DaySerde();
     }
 
@@ -31,9 +31,9 @@ public class StreamSerdes {
         return new HotelDailyAggregatorSerde();
     }
 
-    private static final class DaySerde extends WrapperSerde<Day> {
+    private static final class DaySerde extends WrapperSerde<DayWrapper> {
         public DaySerde() {
-            super(new JsonSerializer<>(), new JsonDeserializer<>(Day.class));
+            super(new JsonSerializer<>(), new JsonDeserializer<>(DayWrapper.class));
         }
     }
 

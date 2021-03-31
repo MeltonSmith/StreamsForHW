@@ -8,7 +8,7 @@ import lombok.Data;
  * Date: 29.03.2021
  */
 @Data
-public class Day {
+public class DayWrapper {
     @JsonProperty("wthr_date")
     private String formattedDate;
     private String year;
