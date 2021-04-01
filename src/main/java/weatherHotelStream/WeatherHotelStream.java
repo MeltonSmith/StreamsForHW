@@ -38,36 +38,6 @@ public class WeatherHotelStream {
         kafkaStreams.start();
         Thread.sleep(60000);
 
-        //trying to write the current state of the "finalData" store to make the records unique per key(hotelId+data)
-//        Metric metric = kafkaStreams.metrics()
-//                .entrySet()
-//                .stream()
-//                .filter(metricNameEntry -> metricNameEntry.getKey().name().equals("process-rate"))
-//                .filter(metricNameEntry -> metricNameEntry.getKey().group().equals("stream-thread-metrics"))
-//                .map(Map.Entry::getValue)
-//                .findFirst().orElse(null);
-
-//        while(true){
-//            assert metric != null;
-//            if (((Double) metric.metricValue()) == 0.0d){
-//                log.info("Process-rate metrics is zero, no records left, writing a final topic for hotelDailyData...");
-//                //taking a stateStore for the final KTable
-//                ReadOnlyKeyValueStore<String, HotelDailyData> store = kafkaStreams.store(StoreQueryParameters.fromNameAndType("finalData", QueryableStoreTypes.keyValueStore()));
-//                KeyValueIterator<String, HotelDailyData> iterator = store.all();
-//                Producer<String, HotelDailyData> producer = new KafkaProducer<>(getPropertiesForProducer());
-//                while (iterator.hasNext()) {
-//                    KeyValue<String, HotelDailyData> next = iterator.next();
-//                    send(producer, next.key, next.value);
-//                }
-//                log.info("Closing Kafka Producer");
-//                producer.close();
-//
-//                log.info("Closing streams");
-//                kafkaStreams.close();
-//                break;
-//            }
-//        }
-
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
                 kafkaStreams.close();
