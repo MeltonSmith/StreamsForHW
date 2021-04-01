@@ -34,6 +34,6 @@ public class HotelDailyDataAggregator {
 
         this.currentCount = newCount;
 
-        log.info("Recalculating HotelDaily: " + hotelDailyData.getHotel().getName() + " new count: " + currentCount + ". For the date: " + hotelDailyData.getDate() + " new avg is: " + hotelDailyData.getAvg_tmpr_c());
+//        log.info("Recalculating HotelDaily: " + hotelDailyData.getHotel().getName() + " new count: " + currentCount + ". For the date: " + hotelDailyData.getDate() + " new avg is: " + hotelDailyData.getAvg_tmpr_c());
     }
 }

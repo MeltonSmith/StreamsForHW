@@ -28,6 +28,7 @@ public class WeatherHotelStream {
     //TODO
     public static final String HOTEL_DAILY_DATA = "hotelDailyData2";
     public static final String DAYS_UNIQUE = "daysUnique1";
+    public static final String DUMMY = "dummy";
 
     public static void main(String[] args) throws Exception{
         StreamsBuilder builder = getBuilder();
@@ -102,13 +103,13 @@ public class WeatherHotelStream {
         //making the key the combination of date+geoHash at the end
         var hotelDailyStream = builder.stream(HOTELS_TOPIC,
                 Consumed.with(stringSerde, hotelsSerde))
-                .map((key, hotel) -> KeyValue.pair("dummy", hotel))
+                .map((key, hotel) -> KeyValue.pair(DUMMY, hotel))
                 .join(uniqueDates,
                         hotelDailyJoiner,
                         window,
                         StreamJoined.with(stringSerde, hotelsSerde, daySerde))
-                .selectKey((k, v) -> v.getHotelGeo2WeatherKey())
-                .peek((k, v) -> System.out.println("join with" + v.getHotel() + " date is " + v.getDate()));
+                .selectKey((k, v) -> v.getHotelGeo2WeatherKey());
+//                .peek((k, v) -> System.out.println("join with" + v.getHotel() + " date is " + v.getDate()));
 
         KStream<String, Weather> weatherRawStream = builder.stream(WEATHER_RAW_TOPIC, Consumed.with(stringSerde, weatherSerde));
         //changing the keys from "dummy" to combination of date+geoHash
