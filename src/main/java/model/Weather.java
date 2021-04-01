@@ -4,7 +4,10 @@ package model;
 import ch.hsr.geohash.GeoHash;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.apache.log4j.Logger;
 
 /**
@@ -13,10 +16,10 @@ import org.apache.log4j.Logger;
  */
 
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Weather {
-    private static final Logger log = Logger.getLogger(Weather.class);
-    private static int COUNT = 0;
-
     @JsonProperty("lat")
     private double latitude;
     @JsonProperty("lng")
@@ -41,11 +44,6 @@ public class Weather {
      */
     @JsonIgnore
     public String getWeatherGeo2HotelKey(){
-//        COUNT++;
-//        if (COUNT % 10000 == 0) {
-//            log.info("Count is " + COUNT);
-//        }
-
         return this.getGeoHash() + "/" + weatherDate;
     }
 }

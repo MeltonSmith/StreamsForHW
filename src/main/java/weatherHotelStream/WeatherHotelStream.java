@@ -23,10 +23,11 @@ import java.util.Properties;
  */
 public class WeatherHotelStream {
     private static final Logger log = Logger.getLogger(WeatherHotelStream.class);
-    public static final String WEATHER_RAW_TOPIC = "weather";
-    public static final String HOTELS_TOPIC = "hotels";
-    public static final String HOTEL_DAILY_DATA = "hotelDailyData";
-    public static final String DAYS_UNIQUE = "daysUnique";
+    public static final String WEATHER_RAW_TOPIC = "weather1";
+    public static final String HOTELS_TOPIC = "hotels1";
+    //TODO
+    public static final String HOTEL_DAILY_DATA = "hotelDailyData2";
+    public static final String DAYS_UNIQUE = "daysUnique1";
 
     public static void main(String[] args) throws Exception{
         StreamsBuilder builder = getBuilder();
@@ -80,7 +81,7 @@ public class WeatherHotelStream {
     /**
      * Creates the needed topology
      */
-    private static StreamsBuilder getBuilder() {
+    public static StreamsBuilder getBuilder() {
         Serde<String> stringSerde = Serdes.String();
         Serde<Weather> weatherSerde = StreamSerdes.weatherSerde();
         Serde<Hotel> hotelsSerde = StreamSerdes.hotelSerde();
@@ -148,9 +149,9 @@ public class WeatherHotelStream {
     /**
      * Kafka streams app config
      */
-    private static Properties getProperties() {
+    public static Properties getProperties() {
         Properties props = new Properties();
-        props.put(StreamsConfig.APPLICATION_ID_CONFIG, "weather-test");
+        props.put(StreamsConfig.APPLICATION_ID_CONFIG, "weather");
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 400000);
         props.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 400000);

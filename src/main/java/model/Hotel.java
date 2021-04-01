@@ -1,14 +1,21 @@
 package model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * Created by: Ian_Rakhmatullin
  * Date: 18.03.2021
  */
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Hotel {
+
     @JsonProperty("Id")
     private long id;
     @JsonProperty("Name")
