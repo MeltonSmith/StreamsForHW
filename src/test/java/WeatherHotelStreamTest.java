@@ -85,6 +85,8 @@ public class WeatherHotelStreamTest {
         createWeatherData(outSideDate, Collections.singletonList(24d), 24, 138);
 
 
+
+        //checking the results
         Map<String, HotelDailyData> map = outputTopic.readKeyValuesToMap();
 
         //1st hotel result
@@ -132,7 +134,6 @@ public class WeatherHotelStreamTest {
 
         hotelsTopic.pipeInput(null, firstHotel);
         hotelsTopic.pipeInput(null, secondHotel);
-
 
         daysUniqueTopic.pipeInput(DUMMY, createDateWrapper(firstDate));
         daysUniqueTopic.pipeInput(DUMMY, createDateWrapper(secondDate));
@@ -247,7 +248,7 @@ public class WeatherHotelStreamTest {
         props.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 400000);
         props.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 400000);
         props.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, 8);
-        props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9094");
+        props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "dummy:1234");
         props.put(ConsumerConfig.METADATA_MAX_AGE_CONFIG, "10000");
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
         props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());

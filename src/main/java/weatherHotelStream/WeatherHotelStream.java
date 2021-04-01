@@ -23,11 +23,10 @@ import java.util.Properties;
  */
 public class WeatherHotelStream {
     private static final Logger log = Logger.getLogger(WeatherHotelStream.class);
-    public static final String WEATHER_RAW_TOPIC = "weather1";
-    public static final String HOTELS_TOPIC = "hotels1";
-    //TODO
-    public static final String HOTEL_DAILY_DATA = "hotelDailyData2";
-    public static final String DAYS_UNIQUE = "daysUnique1";
+    public static final String WEATHER_RAW_TOPIC = "weather";
+    public static final String HOTELS_TOPIC = "hotels";
+    public static final String HOTEL_DAILY_DATA = "hotelDailyData";
+    public static final String DAYS_UNIQUE = "daysUnique";
     public static final String DUMMY = "dummy";
 
     public static void main(String[] args) throws Exception{
