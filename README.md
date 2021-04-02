@@ -1,5 +1,4 @@
-###Creating external table in hive for weather files in HDFS;
-
+### Creating external table in hive for weather files in HDFS
 `CREATE EXTERNAL TABLE weather_external (
 lng DOUBLE,  
 lat DOUBLE,  
@@ -10,7 +9,7 @@ PARTITIONED BY (year string, month string, day string)
 STORED AS PARQUET
 LOCATION "hdfs://localhost:9000/201 HW Dataset/weather";
 `
-###To make partitions work
+### To make partitions work
 
 `MSCK REPAIR TABLE weather_external;`
 
@@ -18,7 +17,7 @@ LOCATION "hdfs://localhost:9000/201 HW Dataset/weather";
 
 `kafka-topics.sh --create --zookeeper my-release-kafka-zookeeper:2181 --replication-factor 1 --partitions 8 --topic weather`
 
-###Creating weather external for kafka handling
+### Creating weather external for kafka handling
 `CREATE EXTERNAL TABLE weather_kafka (
 lng DOUBLE,
 lat DOUBLE,
@@ -34,7 +33,7 @@ TBLPROPERTIES(
 "kafka.bootstrap.servers"="localhost:9094"
 );`
 
-###Inserting from weather_external into weather_kafka with 8 partitions;
+### Inserting from weather_external into weather_kafka with 8 partitions;
 ``FROM weather_external
 INSERT INTO TABLE weather_kafka
 SELECT
@@ -51,8 +50,8 @@ cast(day as int)%8 AS `__partition`,
 -1 AS  `__offset`,
 -1 AS `__timestamp`;``
 
-###I decided to find unique dates among the weather with hive, so:
-###Creating external table for unique days:
+### I decided to find unique dates among the weather with hive, so:
+### Creating external table for unique days:
 `CREATE EXTERNAL TABLE days_kafka (
 wthr_date STRING,
 year STRING,
@@ -63,7 +62,7 @@ TBLPROPERTIES(
 "kafka.topic" = "daysUnique",
 "kafka.bootstrap.servers"="localhost:9094"
 );`
-###And insert into there…:
+### And insert into there…:
 ``INSERT INTO TABLE days_kafka
 SELECT distinct wthr_date,  
 year,
@@ -84,15 +83,15 @@ FROM weather_external;``
 `+------+`
 
 
-###Creating topic for joined hotelWeather data:
+### Creating topic for joined hotelWeather data:
 
-####NOTE: I made a decision of log compaction for reducing the number of old data per key.
+#### NOTE: I made a decision of log compaction for reducing the number of old data per key.
 In the app I use KTable as a final result with commit interval of 400 sec.
 
 `kafka-topics.sh --create --zookeeper my-release-kafka-zookeeper:2181 --replication-factor 1 --partitions 1 --topic hotelDailyData --config "cleanup.policy=compact" --config "delete.retention.ms=70000"  --config "segment.ms=100" --config "min.cleanable.dirty.ratio=0.01"  
 `  
 
-###Creating external table for finalData (optional) I used it for debugging
+### Creating external table for finalData (optional) I used it for debugging
 
 `CREATE EXTERNAL TABLE hotelDailyData (
 Id BIGINT,
@@ -115,10 +114,10 @@ TBLPROPERTIES(
 "kafka.bootstrap.servers"="localhost:9094"
 );`
 
-###Launch the app with 8 threads.
+### Launch the app with 8 threads.
 Executing `select count(*) from hotelDailyData ` gives us `233578` results;
 
-###Check for duplicates query:
+### Check for duplicates query:
 `select * from (select count (id) as cnt, name, wthr_date from hotelDailyData group by id,name, wthr_date) as wtf where cnt  >1; `  
 Result: `4,130 rows selected`  
 
