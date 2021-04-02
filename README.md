@@ -1,4 +1,4 @@
-###Creating external table in hive for weather files in HDFS:
+###Creating external table in hive for weather files in HDFS;
 
 `CREATE EXTERNAL TABLE weather_external (
 lng DOUBLE,  
