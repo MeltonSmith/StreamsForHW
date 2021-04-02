@@ -1,4 +1,5 @@
 ###Creating external table in hive for weather files in HDFS
+
 `CREATE EXTERNAL TABLE weather_external (
 lng DOUBLE,  
 lat DOUBLE,  
@@ -10,9 +11,11 @@ STORED AS PARQUET
 LOCATION "hdfs://localhost:9000/201 HW Dataset/weather";
 `
 ###To make partitions work
+
 `MSCK REPAIR TABLE weather_external;`
 
 ### Creating a topic with 8 partitions for weather in kafka;
+
 `kafka-topics.sh --create --zookeeper my-release-kafka-zookeeper:2181 --replication-factor 1 --partitions 8 --topic weather`
 
 ###Creating weather external for kafka handling
